@@ -1,5 +1,4 @@
 const std = @import("std");
-const testing = std.testing;
 const term = @import("term.zig");
 const InputCache = @import("input_cache.zig");
 
@@ -9,6 +8,8 @@ const Platform = switch (@import("builtin").target.os.tag) {
         pub fn init() void {}
     },
 };
+
+pub const p = @import("parsers/parsers.zig");
 
 pub fn run() !void {
     Platform.init();
@@ -43,4 +44,8 @@ pub fn run() !void {
     defer _ = bw.write("\n") catch {};
 
     _ = arena.reset(.retain_capacity);
+}
+
+test {
+    _ = &p;
 }

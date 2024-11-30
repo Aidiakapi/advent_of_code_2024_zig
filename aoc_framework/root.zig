@@ -1,8 +1,9 @@
 const std = @import("std");
 const testing = std.testing;
 const term = @import("term.zig");
+const InputCache = @import("input_cache.zig");
 
-const platform = switch (@import("builtin").target.os.tag) {
+const Platform = switch (@import("builtin").target.os.tag) {
     .windows => @import("platform_windows.zig"),
     else => struct {
         pub fn init() void {}
@@ -10,7 +11,22 @@ const platform = switch (@import("builtin").target.os.tag) {
 };
 
 pub fn run() !void {
-    platform.init();
+    Platform.init();
+
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const gpa_alloc = gpa.allocator();
+
+    var arena = std.heap.ArenaAllocator.init(gpa_alloc);
+    defer arena.deinit();
+    const arena_alloc = arena.allocator();
+    // Attempt to pre-allocate 50MB, if it fails, no problem
+    _ = arena_alloc.alloc(u8, 50 * 1024 * 1024) catch {};
+    _ = arena.reset(.retain_capacity);
+
+    var input_cache = try InputCache.init(gpa_alloc);
+    defer input_cache.deinit();
+
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     defer {
@@ -25,4 +41,6 @@ pub fn run() !void {
         .{},
     );
     defer _ = bw.write("\n") catch {};
+
+    _ = arena.reset(.retain_capacity);
 }

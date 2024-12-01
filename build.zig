@@ -4,6 +4,14 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const day_option = b.option(u5, "day", "Which day to compile") orelse 0;
+    if (day_option > 25) {
+        @panic("specified day must be <= 25");
+    }
+    const options = b.addOptions();
+    options.addOption(u5, "single_day", day_option);
+    const options_mod = options.createModule();
+
     const lib = b.addStaticLibrary(.{
         .name = "aoc_framework",
         .root_source_file = b.path("aoc_framework/root.zig"),
@@ -17,6 +25,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     exe.root_module.addImport("fw", &lib.root_module);
+    exe.root_module.addImport("config", options_mod);
     exe.linkLibrary(lib);
 
     // Compile these when running `zig build`
@@ -44,6 +53,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     exe_unit_tests.root_module.addImport("fw", &lib.root_module);
+    exe_unit_tests.root_module.addImport("config", options_mod);
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
     const test_step = b.step("test", "Run Advent of Code unit tests");

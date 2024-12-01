@@ -55,13 +55,13 @@ pub fn run(comptime days: anytype) !void {
     _ = arena.reset(.retain_capacity);
 }
 
-fn parseDayNr(comptime day: anytype) u4 {
+fn parseDayNr(comptime day: anytype) u5 {
     const day_name = @typeName(day);
     const error_msg = "Day name should be two digits, ranging 1 through 25, but is: " ++ day_name;
     if (day_name.len != 2) {
         @compileError(error_msg);
     }
-    const day_nr = comptime std.fmt.parseUnsigned(u4, day_name, 10) catch @compileError(error_msg);
+    const day_nr = comptime std.fmt.parseUnsigned(u5, day_name, 10) catch @compileError(error_msg);
     if (day_nr < 1 or day_nr > 25) {
         @compileError(error_msg);
     }

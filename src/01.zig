@@ -4,7 +4,8 @@ const std = @import("std");
 pub fn parse(ctx: fw.p.ParseContext) ?[]struct { u32, u32 } {
     const p = fw.p;
     const n = p.nr(u32);
-    return n.with(p.literal("   ").then(n)).sepBy(p.nl).execute(ctx);
+    const line = n.with(p.literal("   ").then(n));
+    return line.sepBy(p.nl).execute(ctx);
 }
 
 fn sortInputLists(input: []const struct { u32, u32 }, allocator: std.mem.Allocator) !struct { []const u32, []const u32 } {

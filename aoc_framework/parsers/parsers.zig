@@ -1,6 +1,7 @@
 const std = @import("std");
 const infra = @import("infra.zig");
 const combi = @import("combi.zig");
+const multi = @import("multi.zig");
 const primitives = @import("primitives.zig");
 
 pub usingnamespace primitives;
@@ -34,13 +35,11 @@ pub fn ParseResult(T: type) type {
 }
 
 pub fn Parser(comptime parse_fn: anytype) type {
-    const ParseType: type = infra.tryGetParseFnType(parse_fn) orelse
-        @compileError(std.fmt.comptimePrint("parse_fn is not a parse function: {s}", .{@typeName(@TypeOf(parse_fn))}));
     return struct {
-        pub const Output: type = ParseType;
+        pub const Output: type = infra.GetParseFnResultType(parse_fn);
         pub const impl = parse_fn;
 
-        pub fn execute_raw(_: @This(), ctx: ParseContext, input: []const u8) ParseResult(ParseType) {
+        pub fn execute_raw(_: @This(), ctx: ParseContext, input: []const u8) ParseResult(Output) {
             return parse_fn(ctx, input);
         }
 
@@ -65,8 +64,34 @@ pub fn Parser(comptime parse_fn: anytype) type {
             }
         }
 
+        // combi
+        pub fn then(_: @This(), parser: anytype) Parser(
+            combi.then(Output, infra.ResultFromParser(parser), impl, infra.parseFnFromParser(parser)),
+        ) {
+            return .{};
+        }
+
+        pub fn trailed(_: @This(), parser: anytype) Parser(
+            combi.trailed(Output, infra.ResultFromParser(parser), impl, infra.parseFnFromParser(parser)),
+        ) {
+            return .{};
+        }
+
+        pub fn with(_: @This(), parser: anytype) Parser(
+            combi.with(Output, infra.ResultFromParser(parser), impl, infra.parseFnFromParser(parser)),
+        ) {
+            return .{};
+        }
+
         pub fn filter(_: @This(), comptime predicate: anytype) Parser(
-            combi.filter(ParseType, impl, infra.getPredicateFn(ParseType, predicate)),
+            combi.filter(Output, impl, infra.getPredicateFn(Output, predicate)),
+        ) {
+            return .{};
+        }
+
+        // multi
+        pub fn sepBy(_: @This(), separator: anytype) Parser(
+            multi.sepBy(Output, infra.ResultFromParser(separator), impl, infra.parseFnFromParser(separator)),
         ) {
             return .{};
         }

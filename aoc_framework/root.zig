@@ -108,7 +108,9 @@ fn run_day(bw: *BufferedWriter, input_cache: *InputCache, allocator: std.mem.All
 
         try term.format(stdout, " {<bold>}{<dim_magenta>}| {<yellow>}{s}{<reset>} ", .{part_name});
         try bw.flush();
-        const part_output = @field(day, part_name)(parsed_input);
+        const part_fn = @field(day, part_name);
+        const part_output_raw = if (has_allocator_arg) part_fn(parsed_input, allocator) else part_fn(parsed_input);
+        const part_output = if (@typeInfo(@TypeOf(part_output_raw)) == .error_union) try part_output_raw else part_output_raw;
         try print_part_output(stdout, part_output);
     }
 }
@@ -118,7 +120,7 @@ fn print_parse_error(ctx: p.ParseContext, err: p.ParseError, location: []const u
     const max_total_characters = 138;
 
     const stdout = @as(*const Writer, @ptrCast(@alignCast(ctx.user))).*;
-    term.format(stdout, "{<bold>}{<red>}parse error:{<reset>} {}\n", .{err}) catch {};
+    term.format(stdout, " {<bold>}{<dim_magenta>}| {<red>}{}{<reset>}\n", .{err}) catch {};
 
     const output_ptr = @intFromPtr(location.ptr);
     const input_ptr = @intFromPtr(ctx.input.ptr);
@@ -135,8 +137,8 @@ fn print_parse_error(ctx: p.ParseContext, err: p.ParseError, location: []const u
         shown_range_start = newline_before + 1;
     }
 
-    var shown_range_end = @min(location.len, shown_range_start + max_total_characters);
-    if (std.mem.indexOfScalar(u8, ctx.input[error_index..shown_range_end], '\n')) |newline_after| {
+    var shown_range_end = @max(error_index, @min(error_index + location.len, shown_range_start + max_total_characters));
+    if (std.mem.indexOfScalarPos(u8, ctx.input[0..shown_range_end], error_index, '\n')) |newline_after| {
         shown_range_end = newline_after;
     }
 
@@ -146,7 +148,7 @@ fn print_parse_error(ctx: p.ParseContext, err: p.ParseError, location: []const u
     term.format(
         stdout,
         "{<dim_red>}position: {<white>}{}{<dim_red>}, remaining length: {<white>}{}{<dim_red>}\n" ++
-            "text: {<reset>}{s}{s}{<white>}{<underline>}{s}{<no_underline>}{s}{<reset>}\n",
+            "text: {<dim_magenta>}{s}{s}{<white>}{<underline>}{s}{<no_underline>}{s}{<reset>}\n",
         .{
             error_index,
             location.len,

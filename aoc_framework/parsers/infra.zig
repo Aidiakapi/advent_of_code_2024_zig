@@ -23,17 +23,7 @@ pub fn ParseFn(T: type) type {
     return fn (ParseContext, []const u8) ParseResult(T);
 }
 
-pub fn GetParseFnType(TParser: type) type {
-    if (!@hasDecl(TParser, "impl")) {
-        @compileError(std.fmt.comptimePrint("Type is not a parser: {s}", .{@typeName(TParser)}));
-    }
-    return @TypeOf(TParser.impl);
-}
-pub fn getParseFn(TParser: type) GetParseFnType(TParser) {
-    return TParser.impl;
-}
-
-pub fn tryGetParseResultType(T: type) ?type {
+fn TryGetParseResultType(T: type) ?type {
     const info = tryGetStructInfo(T) orelse return null;
 
     if (info.decls.len != 0 or info.fields.len != 2) {
@@ -63,11 +53,32 @@ pub fn tryGetParseResultType(T: type) ?type {
 }
 
 pub fn isParseResult(T: type) bool {
-    _ = tryGetParseResultType(T) orelse return false;
+    _ = TryGetParseResultType(T) orelse return false;
     return true;
 }
 
-pub fn tryGetParseFnType(comptime parse_fn: anytype) ?type {
+fn ParseFnFromParser(comptime parser: anytype) type {
+    const T = @TypeOf(parser);
+    if (!@hasDecl(T, "impl")) {
+        @compileError(std.fmt.comptimePrint("Expected parser1, got: {s}", .{@typeName(T)}));
+    }
+    return @TypeOf(T.impl);
+}
+
+pub fn parseFnFromParser(comptime parser: anytype) ParseFnFromParser(parser) {
+    return @TypeOf(parser).impl;
+}
+
+pub fn ResultFromParser(comptime parser: anytype) type {
+    return GetParseFnResultType(parseFnFromParser(parser));
+}
+
+pub fn GetParseFnResultType(comptime parse_fn: anytype) type {
+    return TryGetParseFnResultType(parse_fn) orelse
+        @compileError(std.fmt.comptimePrint("expected parse function, but got: {s}", .{@typeName(@TypeOf(parse_fn))}));
+}
+
+pub fn TryGetParseFnResultType(comptime parse_fn: anytype) ?type {
     const info = tryGetFnInfo(@TypeOf(parse_fn)) orelse return null;
     if (info.is_var_args or
         info.params.len != 2 or
@@ -76,27 +87,22 @@ pub fn tryGetParseFnType(comptime parse_fn: anytype) ?type {
     {
         return null;
     }
-    return tryGetParseResultType(info.return_type.?);
+    return TryGetParseResultType(info.return_type.?);
 }
 
-pub fn isParseFn(comptime parse_fn: anytype) bool {
-    _ = tryGetParseFnType(parse_fn) orelse return false;
-    return true;
-}
-
-pub fn tryGetFnInfo(T: type) ?std.builtin.Type.Fn {
+fn tryGetFnInfo(T: type) ?std.builtin.Type.Fn {
     switch (@typeInfo(T)) {
         .@"fn" => |value| return value,
         else => return null,
     }
 }
-pub fn tryGetStructInfo(T: type) ?std.builtin.Type.Struct {
+fn tryGetStructInfo(T: type) ?std.builtin.Type.Struct {
     switch (@typeInfo(T)) {
         .@"struct" => |value| return value,
         else => return null,
     }
 }
-pub fn tryGetUnionInfo(T: type) ?std.builtin.Type.Union {
+fn tryGetUnionInfo(T: type) ?std.builtin.Type.Union {
     switch (@typeInfo(T)) {
         .@"union" => |value| return value,
         else => return null,
@@ -165,9 +171,9 @@ pub fn getPredicateFn(TInput: type, comptime predicate: anytype) GetPredicateFnT
     return unwrapStructEvalFn(predicate);
 }
 
-test "tryGetParseResultType" {
-    try std.testing.expectEqual(u8, tryGetParseResultType(ParseResult(u8)));
-    try std.testing.expectEqual([]const u8, tryGetParseResultType(ParseResult([]const u8)));
-    try std.testing.expectEqual(void, tryGetParseResultType(ParseResult(void)));
-    try std.testing.expectEqual(null, tryGetParseResultType(u8));
+test "TryGetParseResultType" {
+    try std.testing.expectEqual(u8, TryGetParseResultType(ParseResult(u8)));
+    try std.testing.expectEqual([]const u8, TryGetParseResultType(ParseResult([]const u8)));
+    try std.testing.expectEqual(void, TryGetParseResultType(ParseResult(void)));
+    try std.testing.expectEqual(null, TryGetParseResultType(u8));
 }

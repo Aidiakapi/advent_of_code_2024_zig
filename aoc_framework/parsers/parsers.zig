@@ -7,9 +7,15 @@ pub usingnamespace primitives;
 
 pub const ParseContext = struct {
     allocator: std.mem.Allocator,
+    input: []const u8,
+    report_parse_error: ?*const fn (ParseContext, ParseError, []const u8) void,
+    user: ?*anyopaque,
 
     pub const testing = ParseContext{
         .allocator = std.testing.allocator,
+        .input = "",
+        .report_parse_error = null,
+        .user = null,
     };
 };
 
@@ -38,27 +44,23 @@ pub fn Parser(comptime parse_fn: anytype) type {
             return parse_fn(ctx, input);
         }
 
-        pub fn execute(this: @This(), ctx: ParseContext, input: []const u8) !Output {
-            const output = this.execute_raw(ctx, input);
+        pub fn execute(this: @This(), ctx: ParseContext) ?Output {
+            const output = this.execute_raw(ctx, ctx.input);
             switch (output.result) {
                 .success => |value| {
                     if (output.location.len == 0 or (output.location.len == 1 and output.location[0] == '\n')) {
                         return value;
                     }
-                    std.debug.print(
-                        "parsing did not consume the whole input, there are {} characters remaining",
-                        .{output.location.len},
-                    );
-                    return ParseError.InputNotConsumed;
+                    if (ctx.report_parse_error) |report_parse_error| {
+                        report_parse_error(ctx, ParseError.InputNotConsumed, output.location);
+                    }
+                    return null;
                 },
                 .failure => |err| {
-                    if (output.location.ptr >= input.ptr and output.location.ptr + output.location.len <= input.ptr + input.len) {
-                        const parseErrorIndex = output.location.ptr - input.ptr;
-                        std.debug.print("failure to parse input at index: {}", .{parseErrorIndex});
-                    } else {
-                        std.debug.print("failure to parse input at unknown index", .{});
+                    if (ctx.report_parse_error) |report_parse_error| {
+                        report_parse_error(ctx, err, output.location);
                     }
-                    return err;
+                    return null;
                 },
             }
         }

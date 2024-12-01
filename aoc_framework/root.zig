@@ -47,14 +47,14 @@ pub fn run(comptime days: anytype) !void {
     defer _ = stdout.writeByte('\n') catch {};
 
     inline for (days) |day| {
-        try run_day(&bw, &input_cache, arena_alloc, day);
+        try runDay(&bw, &input_cache, arena_alloc, day);
         _ = arena.reset(.retain_capacity);
     }
 
     _ = arena.reset(.retain_capacity);
 }
 
-fn parse_day_nr(comptime day: anytype) u4 {
+fn parseDayNr(comptime day: anytype) u4 {
     const day_name = @typeName(day);
     const error_msg = "Day name should be two digits, ranging 1 through 25, but is: " ++ day_name;
     if (day_name.len != 2) {
@@ -67,9 +67,9 @@ fn parse_day_nr(comptime day: anytype) u4 {
     return day_nr;
 }
 
-fn run_day(bw: *BufferedWriter, input_cache: *InputCache, allocator: std.mem.Allocator, comptime day: anytype) !void {
+fn runDay(bw: *BufferedWriter, input_cache: *InputCache, allocator: std.mem.Allocator, comptime day: anytype) !void {
     const stdout = bw.writer();
-    const day_nr = comptime parse_day_nr(day);
+    const day_nr = comptime parseDayNr(day);
     try term.format(stdout, "{<bold>}{<white>}day{s}{<reset>}", .{@typeName(day)});
     try bw.flush();
     defer _ = term.format(stdout, "{<reset>}\n", .{}) catch {};
@@ -84,7 +84,7 @@ fn run_day(bw: *BufferedWriter, input_cache: *InputCache, allocator: std.mem.All
         break :blk day.parse(p.ParseContext{
             .allocator = allocator,
             .input = input.items,
-            .report_parse_error = print_parse_error,
+            .report_parse_error = printParseError,
             .user = @constCast(&stdout),
         }) orelse {
             try bw.flush();
@@ -111,11 +111,11 @@ fn run_day(bw: *BufferedWriter, input_cache: *InputCache, allocator: std.mem.All
         const part_fn = @field(day, part_name);
         const part_output_raw = if (has_allocator_arg) part_fn(parsed_input, allocator) else part_fn(parsed_input);
         const part_output = if (@typeInfo(@TypeOf(part_output_raw)) == .error_union) try part_output_raw else part_output_raw;
-        try print_part_output(stdout, part_output);
+        try printPartOutput(stdout, part_output);
     }
 }
 
-fn print_parse_error(ctx: p.ParseContext, err: p.ParseError, location: []const u8) void {
+fn printParseError(ctx: p.ParseContext, err: p.ParseError, location: []const u8) void {
     const characters_before_error_location = 20;
     const max_total_characters = 138;
 
@@ -160,7 +160,7 @@ fn print_parse_error(ctx: p.ParseContext, err: p.ParseError, location: []const u
     ) catch {};
 }
 
-fn print_part_output(stdout: Writer, value: anytype) !void {
+fn printPartOutput(stdout: Writer, value: anytype) !void {
     try term.format(stdout, "{<white>}{: >20}{<reset>}", .{value});
 }
 

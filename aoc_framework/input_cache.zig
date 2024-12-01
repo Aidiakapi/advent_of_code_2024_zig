@@ -25,18 +25,18 @@ pub fn init(allocator: Allocator) !@This() {
     };
 }
 
-pub fn deinit(this: *@This()) void {
-    this.client.deinit();
-    this.inputs_dir.close();
-    this.* = undefined;
+pub fn deinit(self: *@This()) void {
+    self.client.deinit();
+    self.inputs_dir.close();
+    self.* = undefined;
 }
 
-fn getSessionToken(this: *@This()) !*const SessionToken {
-    if (this.session_token) |*session_token| {
+fn getSessionToken(self: *@This()) !*const SessionToken {
+    if (self.session_token) |*session_token| {
         return session_token;
     }
-    this.session_token = std.mem.zeroes(SessionToken);
-    const session_token: *SessionToken = &this.session_token.?;
+    self.session_token = std.mem.zeroes(SessionToken);
+    const session_token: *SessionToken = &self.session_token.?;
     const read = try std.fs.cwd().readFile("token.txt", session_token);
     if (read.len != session_token.len) {
         return error.TokenHasWrongSize;
@@ -44,13 +44,13 @@ fn getSessionToken(this: *@This()) !*const SessionToken {
     return session_token;
 }
 
-pub fn get(this: *@This(), comptime day: u32, allocator: Allocator) !std.ArrayList(u8) {
+fn getImpl(self: *@This(), comptime day: u32, allocator: Allocator) !std.ArrayList(u8) {
     if (day < 1 or day > 25) {
         return error.DayOutOfRange;
     }
     // Already cached on disk
     const file_path = std.fmt.comptimePrint("{:0>2}.txt", .{day});
-    const result_from_disk: ?[]u8 = this.inputs_dir.readFileAlloc(allocator, file_path, 1024 * 1024) catch |err| blk: {
+    const result_from_disk: ?[]u8 = self.inputs_dir.readFileAlloc(allocator, file_path, 1024 * 1024) catch |err| blk: {
         if (err == error.FileTooBig) {
             return err;
         }
@@ -60,7 +60,7 @@ pub fn get(this: *@This(), comptime day: u32, allocator: Allocator) !std.ArrayLi
         return std.ArrayList(u8).fromOwnedSlice(allocator, result);
     }
 
-    const session_token = try this.getSessionToken();
+    const session_token = try self.getSessionToken();
     const session_key = "session=";
     var cookies: [session_key.len + session_token.len]u8 = undefined;
     @memcpy(cookies[0..session_key.len], session_key);
@@ -68,7 +68,7 @@ pub fn get(this: *@This(), comptime day: u32, allocator: Allocator) !std.ArrayLi
 
     // Throttle requests
     const throttle_time_ns = throttle_time_s * 1_000_000_000;
-    if (this.last_request_time) |last_request_time| {
+    if (self.last_request_time) |last_request_time| {
         const elapsed = (Instant.now() catch unreachable).since(last_request_time);
         if (elapsed < throttle_time_ns) {
             std.Thread.sleep(throttle_time_ns - elapsed);
@@ -77,7 +77,7 @@ pub fn get(this: *@This(), comptime day: u32, allocator: Allocator) !std.ArrayLi
 
     const url = std.fmt.comptimePrint("https://adventofcode.com/2024/day/{}/input", .{day});
     var response = std.ArrayList(u8).init(allocator);
-    const result = try this.client.fetch(.{
+    const result = try self.client.fetch(.{
         .location = .{ .url = url },
         .response_storage = .{ .dynamic = &response },
         .extra_headers = &.{http.Header{
@@ -85,15 +85,24 @@ pub fn get(this: *@This(), comptime day: u32, allocator: Allocator) !std.ArrayLi
             .value = &cookies,
         }},
     });
-    this.last_request_time = Instant.now() catch unreachable;
+    self.last_request_time = Instant.now() catch unreachable;
     if (result.status != .ok) {
         return error.HttpRequestFailed;
     }
 
-    try this.inputs_dir.writeFile(.{
+    try self.inputs_dir.writeFile(.{
         .sub_path = file_path,
         .data = response.items,
     });
 
     return response;
+}
+
+pub fn get(self: *@This(), comptime day: u32, allocator: Allocator) !std.ArrayList(u8) {
+    var result = try self.getImpl(day, allocator);
+    if (std.mem.indexOfScalar(u8, result.items, '\r')) |_| {
+        const replacements = std.mem.replace(u8, result.items, "\r\n", "\n", result.items);
+        result.items.len -= replacements;
+    }
+    return result;
 }

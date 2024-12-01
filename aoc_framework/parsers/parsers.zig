@@ -39,12 +39,12 @@ pub fn Parser(comptime parse_fn: anytype) type {
         pub const Output: type = infra.GetParseFnResultType(parse_fn);
         pub const impl = parse_fn;
 
-        pub fn execute_raw(_: @This(), ctx: ParseContext, input: []const u8) ParseResult(Output) {
+        pub fn executeRaw(_: @This(), ctx: ParseContext, input: []const u8) ParseResult(Output) {
             return parse_fn(ctx, input);
         }
 
-        pub fn execute(this: @This(), ctx: ParseContext) ?Output {
-            const output = this.execute_raw(ctx, ctx.input);
+        pub fn execute(self: @This(), ctx: ParseContext) ?Output {
+            const output = self.executeRaw(ctx, ctx.input);
             switch (output.result) {
                 .success => |value| {
                     if (output.location.len == 0 or (output.location.len == 1 and output.location[0] == '\n')) {

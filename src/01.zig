@@ -1,5 +1,5 @@
-const std = @import("std");
 const fw = @import("fw");
+const std = @import("std");
 
 pub fn parse(ctx: fw.p.ParseContext) ?[]struct { u32, u32 } {
     const p = fw.p;
@@ -87,4 +87,19 @@ pub fn pt2(input: []const struct { u32, u32 }, allocator: std.mem.Allocator) !us
         run1 = iter1.next() orelse return total;
         run2 = iter2.next() orelse return total;
     }
+}
+
+const test_input =
+    \\3   4
+    \\4   3
+    \\2   5
+    \\1   3
+    \\3   9
+    \\3   3
+;
+test "day01::pt1" {
+    try fw.t.simple(@This(), pt1, 11, test_input);
+}
+test "day01::pt2" {
+    try fw.t.simple(@This(), pt2, 31, test_input);
 }

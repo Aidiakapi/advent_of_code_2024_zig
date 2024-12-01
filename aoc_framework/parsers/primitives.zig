@@ -161,9 +161,9 @@ test "parsing::any" {
     try std.testing.expectEqualDeep(ParseResult(u8){
         .result = .{ .success = 'h' },
         .location = "ello",
-    }, any.execute_raw(ParseContext.testing, "hello"));
+    }, any.executeRaw(ParseContext.testing, "hello"));
     try std.testing.expectEqualDeep(ParseResult(u8){
         .result = .{ .failure = ParseError.EmptyInput },
         .location = "",
-    }, any.execute_raw(ParseContext.testing, ""));
+    }, any.executeRaw(ParseContext.testing, ""));
 }

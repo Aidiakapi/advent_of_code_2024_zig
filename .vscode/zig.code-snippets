@@ -2,5 +2,9 @@
     "day": {
         "prefix": "day",
         "body": "const fw = @import(\"fw\");\n\npub fn parse(ctx: fw.p.ParseContext) ?void {\n    const p = fw.p;\n    ${1:_ = p;\n    _ = ctx;}\n    return void{};\n}\n\npub fn pt1(input: void) void {\n    _ = input;\n}\n\npub fn pt2(input: void) void {\n    _ = input;\n}"
+    },
+    "test_simple": {
+        "prefix": "test_simple",
+        "body": "const test_input =\n    \\\\\\\\${3:}\n;\ntest \"day${1:}::pt1\" {\n    try fw.t.simple(@This(), pt1, ${2:void}, test_input);\n}\ntest \"day${1:}::pt2\" {\n    try fw.t.simple(@This(), pt2, void, test_input);\n}"
     }
 }

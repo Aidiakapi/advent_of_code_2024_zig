@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug exe",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/advent_of_code_2024.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "symbolSearchPath": "${workspaceFolder}/zig-out/bin",
+            "environment": [],
+            "logging": {
+                "moduleLoad": false
+            },
+        }
+    ]
+}

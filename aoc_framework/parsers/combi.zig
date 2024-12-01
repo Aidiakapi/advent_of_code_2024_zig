@@ -108,10 +108,10 @@ test "parsing::filter" {
         try std.testing.expectEqualDeep(ParseResult(u8){
             .result = .{ .success = 'h' },
             .location = "ello",
-        }, parser.execute_raw(ParseContext.testing, "hello"));
+        }, parser.executeRaw(ParseContext.testing, "hello"));
         try std.testing.expectEqualDeep(ParseResult(u8){
             .result = .{ .failure = ParseError.Filtered },
             .location = "jello",
-        }, parser.execute_raw(ParseContext.testing, "jello"));
+        }, parser.executeRaw(ParseContext.testing, "jello"));
     }
 }

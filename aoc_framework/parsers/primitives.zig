@@ -157,7 +157,7 @@ pub fn nr(comptime Number: type) Parser(nrImpl(Number)) {
     return .{};
 }
 
-test "parsing::any" {
+test "parsing::primitives::any" {
     try std.testing.expectEqualDeep(ParseResult(u8){
         .result = .{ .success = 'h' },
         .location = "ello",

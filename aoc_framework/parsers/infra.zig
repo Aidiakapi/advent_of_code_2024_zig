@@ -171,6 +171,32 @@ pub fn getPredicateFn(TInput: type, comptime predicate: anytype) GetPredicateFnT
     return unwrapStructEvalFn(predicate);
 }
 
+pub inline fn assertIsTuple(T: type, comptime min_length: ?comptime_int, comptime max_length: ?comptime_int) void {
+    switch (@typeInfo(T)) {
+        .@"struct" => |s| if (s.is_tuple) {
+            if (min_length) |min_len| {
+                if (s.fields.len < min_len) {
+                    @compileError(std.fmt.comptimePrint(
+                        "tuple must have at least {} elements, but has {}, type: {s}",
+                        .{ min_len, s.fields.len, @typeName(T) },
+                    ));
+                }
+            }
+            if (max_length) |max_len| {
+                if (s.fields.len > max_len) {
+                    @compileError(std.fmt.comptimePrint(
+                        "tuple must have at most {} elements, but has {}, type: {s}",
+                        .{ max_len, s.fields.len, @typeName(T) },
+                    ));
+                }
+            }
+            return;
+        },
+        else => {},
+    }
+    @compileError(std.fmt.comptimePrint("expected a tuple type, but got: {s}", .{@typeName(T)}));
+}
+
 test "TryGetParseResultType" {
     try std.testing.expectEqual(u8, TryGetParseResultType(ParseResult(u8)));
     try std.testing.expectEqual([]const u8, TryGetParseResultType(ParseResult([]const u8)));

@@ -98,8 +98,12 @@ pub fn Parser(comptime parse_fn: anytype) type {
     };
 }
 
+pub const oneOf = multi.oneOf;
+pub const oneOfValues = multi.oneOfValues;
+
 test {
-    _ = &infra;
     _ = &combi;
+    _ = &infra;
+    _ = &multi;
     _ = &primitives;
 }

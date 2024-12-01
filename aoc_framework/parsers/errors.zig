@@ -5,4 +5,5 @@ pub const ParseError = error {
     InvalidCharacter,
     NumberOverflow,
     Filtered,
+    NoneMatch,
 };

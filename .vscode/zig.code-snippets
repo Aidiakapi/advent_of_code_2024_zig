@@ -5,6 +5,6 @@
     },
     "test_simple": {
         "prefix": "test_simple",
-        "body": "const test_input =\n    \\\\\\\\${3:}\n;\ntest \"day${1:}::pt1\" {\n    try fw.t.simple(@This(), pt1, ${2:void}, test_input);\n}\ntest \"day${1:}::pt2\" {\n    try fw.t.simple(@This(), pt2, void, test_input);\n}"
+        "body": "const test_input =\n    \\\\\\\\${3:}\n;\ntest \"day${1:}::pt1\" {\n    try fw.t.simple(@This(), pt1, ${2:void{\\}}, test_input);\n}\ntest \"day${1:}::pt2\" {\n    try fw.t.simple(@This(), pt2, void{}, test_input);\n}"
     }
 }

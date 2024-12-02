@@ -3,6 +3,7 @@ const std = @import("std");
 fn getDay(comptime day_nr: u5) ?type {
     return switch (day_nr) {
         1 => @import("01.zig"),
+        2 => @import("02.zig"),
         else => null,
     };
 }

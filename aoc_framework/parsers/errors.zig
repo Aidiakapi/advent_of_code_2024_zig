@@ -6,4 +6,7 @@ pub const ParseError = error {
     NumberOverflow,
     Filtered,
     NoneMatch,
+    GridNoItems,
+    GridRowTooShort,
+    GridRowTooLong,
 };

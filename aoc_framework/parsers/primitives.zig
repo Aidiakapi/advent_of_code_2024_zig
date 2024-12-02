@@ -23,6 +23,34 @@ fn anyImpl(_: ParseContext, input: []const u8) ParseResult(u8) {
 
 pub const any = Parser(anyImpl){};
 
+test "parsing::primitives::any" {
+    try std.testing.expectEqualDeep(ParseResult(u8){
+        .result = .{ .success = 'h' },
+        .location = "ello",
+    }, any.executeRaw(ParseContext.testing, "hello"));
+    try std.testing.expectEqualDeep(ParseResult(u8){
+        .result = .{ .failure = ParseError.EmptyInput },
+        .location = "",
+    }, any.executeRaw(ParseContext.testing, ""));
+}
+
+fn digitImpl(_: ParseContext, input: []const u8) ParseResult(u4) {
+    if (input.len == 0 or input[0] < '0' or input[0] > '9') {
+        return .{
+            .result = .{
+                .failure = if (input.len == 0) ParseError.EmptyInput else ParseError.InvalidCharacter,
+            },
+            .location = input,
+        };
+    }
+    return .{
+        .result = .{ .success = @intCast(input[0] - '0') },
+        .location = input[1..],
+    };
+}
+
+pub const digit = Parser(digitImpl){};
+
 fn matchStrSlice(comptime value: []const u8, input: []const u8) ParseResult(void) {
     if (std.mem.startsWith(u8, input, value)) {
         return .{
@@ -47,9 +75,15 @@ fn literalImpl(comptime value: anytype) ParseFn(void) {
             }
             const T = @TypeOf(value);
             if (T == u8 or (T == comptime_int and value > 0 and value < 255)) {
+                if (input[0] == value) {
+                    return .{
+                        .result = .{ .success = void{} },
+                        .location = input[1..],
+                    };
+                }
                 return .{
-                    .result = .{ .success = void{} },
-                    .location = input[1..],
+                    .result = .{ .failure = ParseError.LiteralDoesNotMatch },
+                    .location = input,
                 };
             }
             if (T == []const u8) {
@@ -157,13 +191,10 @@ pub fn nr(comptime Number: type) Parser(nrImpl(Number)) {
     return .{};
 }
 
-test "parsing::primitives::any" {
-    try std.testing.expectEqualDeep(ParseResult(u8){
-        .result = .{ .success = 'h' },
-        .location = "ello",
-    }, any.executeRaw(ParseContext.testing, "hello"));
-    try std.testing.expectEqualDeep(ParseResult(u8){
-        .result = .{ .failure = ParseError.EmptyInput },
-        .location = "",
-    }, any.executeRaw(ParseContext.testing, ""));
+fn noOpImpl(_: ParseContext, input: []const u8) ParseResult(void) {
+    return .{
+        .result = .{ .success = void{} },
+        .location = input,
+    };
 }
+pub const noOp = Parser(noOpImpl){};

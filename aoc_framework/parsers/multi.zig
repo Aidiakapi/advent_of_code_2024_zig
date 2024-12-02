@@ -1,6 +1,7 @@
 const std = @import("std");
 const p = @import("parsers.zig");
 const infra = @import("infra.zig");
+const grid_mod = @import("../grid.zig");
 
 const Parser = p.Parser;
 const ParseResult = p.ParseResult;
@@ -18,7 +19,7 @@ pub fn sepBy(T: type, TSep: type, comptime value: ParseFn(T), comptime separator
                     .result = .{ .failure = err },
                     .location = first.location,
                 },
-                .success => |v| elements.append(ctx.allocator, v) catch @panic("mem"),
+                .success => |v| elements.append(ctx.allocator, v) catch @panic("OOM"),
             }
             var remainder = first.location;
             while (true) {
@@ -29,11 +30,11 @@ pub fn sepBy(T: type, TSep: type, comptime value: ParseFn(T), comptime separator
                 const next = value(ctx, sep_res.location);
                 switch (next.result) {
                     .failure => break,
-                    .success => |v| elements.append(ctx.allocator, v) catch @panic("mem"),
+                    .success => |v| elements.append(ctx.allocator, v) catch @panic("OOM"),
                 }
                 remainder = next.location;
             }
-            const output = elements.toOwnedSlice(ctx.allocator) catch @panic("mem");
+            const output = elements.toOwnedSlice(ctx.allocator) catch @panic("OOM");
             return .{
                 .result = .{ .success = output },
                 .location = remainder,
@@ -76,6 +77,25 @@ pub fn oneOfImpl(comptime parsers: anytype) ParseFn(OneOfType(parsers)) {
 /// returns the value for that parser. All parsers must return the same type.
 pub fn oneOf(comptime parsers: anytype) Parser(oneOfImpl(parsers)) {
     return .{};
+}
+
+test "parsing::multi::oneOf" {
+    const parser = oneOf(.{
+        p.literal("hello"),
+        p.literal("world"),
+    });
+    try std.testing.expectEqualDeep(ParseResult(void){
+        .result = .{ .success = void{} },
+        .location = " world",
+    }, parser.executeRaw(ParseContext.testing, "hello world"));
+    try std.testing.expectEqualDeep(ParseResult(void){
+        .result = .{ .success = void{} },
+        .location = " hello",
+    }, parser.executeRaw(ParseContext.testing, "world hello"));
+    try std.testing.expectEqualDeep(ParseResult(void){
+        .result = .{ .failure = ParseError.NoneMatch },
+        .location = "herro wolld",
+    }, parser.executeRaw(ParseContext.testing, "herro wolld"));
 }
 
 pub fn OneOfValuesType(comptime kvs: anytype) type {
@@ -123,26 +143,6 @@ pub fn oneOfValues(comptime kvs: anytype) Parser(oneOfValuesImpl(kvs)) {
     return .{};
 }
 
-test "parsing::multi::oneOf" {
-    const parser = oneOf(.{
-        p.literal("hello"),
-        p.literal("world"),
-    });
-    try std.testing.expectEqualDeep(ParseResult(void){
-        .result = .{ .success = void{} },
-        .location = " world",
-    }, parser.executeRaw(ParseContext.testing, "hello world"));
-    try std.testing.expectEqualDeep(ParseResult(void){
-        .result = .{ .success = void{} },
-        .location = " hello",
-    }, parser.executeRaw(ParseContext.testing, "world hello"));
-    try std.testing.expectEqualDeep(ParseResult(void){
-        .result = .{ .failure = ParseError.NoneMatch },
-        .location = "herro wolld",
-    }, parser.executeRaw(ParseContext.testing, "herro wolld"));
-}
-
-
 test "parsing::multi::oneOfValues" {
     const parser = oneOfValues(.{
         .{ p.literal("hello"), 123 },
@@ -160,4 +160,110 @@ test "parsing::multi::oneOfValues" {
         .result = .{ .failure = ParseError.NoneMatch },
         .location = "herro wolld",
     }, parser.executeRaw(ParseContext.testing, "herro wolld"));
+}
+
+fn gridImpl(
+    Grid: type,
+    TColSep: type,
+    TRowSep: type,
+    comptime parseItem: ParseFn(Grid.Item),
+    comptime parseColSep: ParseFn(TColSep),
+    comptime parseRowSep: ParseFn(TRowSep),
+) ParseFn(Grid) {
+    const Builder = Grid.Builder;
+    return struct {
+        fn makeError(location: []const u8, err: grid_mod.BuildGridError) ParseResult(Grid) {
+            return .{
+                .result = .{ .failure = switch (err) {
+                    grid_mod.BuildGridError.NoItems => ParseError.GridNoItems,
+                    grid_mod.BuildGridError.RowTooShort => ParseError.GridRowTooShort,
+                    grid_mod.BuildGridError.RowTooLong => ParseError.GridRowTooLong,
+                } },
+                .location = location,
+            };
+        }
+
+        fn parse(ctx: ParseContext, input: []const u8) ParseResult(Grid) {
+            var builder = Builder.init(ctx.allocator);
+
+            var remainder = input;
+            var pre_sep_remainder = input;
+            end_of_grid: while (true) {
+                end_of_row: while (true) {
+                    const item = parseItem(ctx, remainder);
+                    switch (item.result) {
+                        .failure => {
+                            remainder = pre_sep_remainder;
+                            break :end_of_row;
+                        },
+                        .success => |value| {
+                            builder.pushItem(value) catch |err| {
+                                builder.deinit();
+                                return makeError(remainder, err);
+                            };
+                        },
+                    }
+
+                    remainder = item.location;
+                    pre_sep_remainder = remainder;
+                    const col_sep = parseColSep(ctx, remainder);
+                    switch (col_sep.result) {
+                        .failure => break :end_of_row,
+                        .success => remainder = col_sep.location,
+                    }
+                }
+
+                builder.advanceToNextRow() catch |err| {
+                    builder.deinit();
+                    return makeError(remainder, err);
+                };
+
+                pre_sep_remainder = remainder;
+                const row_sep = parseRowSep(ctx, remainder);
+                switch (row_sep.result) {
+                    .failure => break :end_of_grid,
+                    .success => remainder = row_sep.location,
+                }
+            }
+
+            const output = builder.toOwned() catch |err| {
+                return makeError(remainder, err);
+            };
+            return .{
+                .result = .{ .success = output },
+                .location = remainder,
+            };
+        }
+    }.parse;
+}
+pub fn grid(
+    Grid: type,
+    comptime parse_item: anytype,
+    comptime parse_col_sep: anytype,
+    comptime parse_row_sep: anytype,
+) Parser(gridImpl(
+    Grid,
+    infra.ResultFromParser(parse_col_sep),
+    infra.ResultFromParser(parse_row_sep),
+    infra.parseFnFromParser(parse_item),
+    infra.parseFnFromParser(parse_col_sep),
+    infra.parseFnFromParser(parse_row_sep),
+)) {
+    return .{};
+}
+
+test "parsing::multi::grid" {
+    const Grid = grid_mod.DenseGrid(u8);
+    const parser = grid(Grid, p.nr(u8), p.literal('a'), p.literal('b'));
+
+    var parsed = parser.executeRaw(ParseContext.testing, "10a20a30b40a50a60abc");
+    try std.testing.expectEqualDeep(ParseResult(Grid){
+        .result = .{ .success = Grid{
+            .items = @constCast(@as([]const u8, &.{ @as(u8, 10), 20, 30, 40, 50, 60 })),
+            .width = 3,
+            .height = 2,
+        } },
+        .location = "abc",
+    }, parsed);
+    parsed.result.success.free(std.testing.allocator);
 }

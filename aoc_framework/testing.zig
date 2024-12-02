@@ -122,7 +122,10 @@ pub fn simpleMulti(Day: type, comptime partFn: anytype, pairs: anytype) !void {
         const expected = pair[0];
         const input = pair[1];
         const actual = try ctx.execPart(partFn, input);
-        try std.testing.expectEqualDeep(expected, actual);
+        std.testing.expectEqualDeep(expected, actual) catch |err| {
+            print("{<bold>}{<red>}invalid input: {<reset>}{s}\n", .{input});
+            return err;
+        };
     }
 }
 

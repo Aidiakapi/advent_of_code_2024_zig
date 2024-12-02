@@ -9,38 +9,12 @@ pub fn parse(ctx: fw.p.ParseContext) ?Parsed {
     return line.sepBy(p.nl).execute(ctx);
 }
 
-fn isSafePt1(line: []const u32) bool {
-    if (line.len < 2) {
-        return true;
-    }
-    const is_asc = line[0] < line[1];
-    for (line[0 .. line.len - 1], line[1..]) |a, b| {
-        if (a == b) {
-            return false;
-        }
-        const curr_asc = a < b;
-        if (curr_asc != is_asc) {
-            return false;
-        }
-        const delta = if (is_asc) b - a else a - b;
-        if (delta > 3) {
-            return false;
-        }
-    }
-    return true;
+pub fn pt1(input: Parsed) usize {
+    return pts(input, isSafePt1);
 }
 
-fn isSafePt2(line: []const u32) bool {
-    std.debug.assert(line.len <= 128);
-    var buf: [128]u32 = undefined;
-    for (0..line.len) |i| {
-        @memcpy(buf[0..i], line[0..i]);
-        @memcpy(buf[i .. line.len - 1], line[i + 1 ..]);
-        if (isSafePt1(buf[0 .. line.len - 1])) {
-            return true;
-        }
-    }
-    return false;
+pub fn pt2(input: Parsed) usize {
+    return pts(input, isSafePt2);
 }
 
 fn pts(input: Parsed, isSafeFn: fn (line: []const u32) bool) usize {
@@ -53,12 +27,72 @@ fn pts(input: Parsed, isSafeFn: fn (line: []const u32) bool) usize {
     return safeLineCount;
 }
 
-pub fn pt1(input: Parsed) usize {
-    return pts(input, isSafePt1);
+fn isSafePt1(line: []const u32) bool {
+    if (line.len < 2) {
+        return true;
+    }
+    const is_asc = line[0] < line[1];
+    return if (is_asc) isSafeSeq(line, true) else isSafeSeq(line, false);
 }
 
-pub fn pt2(input: Parsed) usize {
-    return pts(input, isSafePt2);
+fn isSafePt2(line: []const u32) bool {
+    return isSafePt2Core(line, true) or isSafePt2Core(line, false);
+}
+
+fn isSafePt2Core(line: []const u32, comptime is_asc: bool) bool {
+    for (1..line.len) |i| {
+        const a = line[i - 1];
+        const b = line[i];
+        if (isSafePair(a, b, is_asc)) {
+            continue;
+        }
+
+        // from the sequence:
+        // x y a b m n
+        // `x y a` is guaranteed to be valid
+        // `a b` is guaranteed to be invalid, one must be removed
+        if (i + 1 == line.len) {
+            return true; // sequence is actually `x y a b`, safe to remove `b`
+        }
+        if (!isSafeSeq(line[i + 1 ..], is_asc)) {
+            return false; // sequence `m n` is not safe in any case
+        }
+        if (isSafePair(a, line[i + 1], is_asc)) {
+            return true; // `a m` is legal, remove `b`
+        }
+        if (!isSafePair(b, line[i + 1], is_asc)) {
+            return false; // `b m` is illegal, cannot remove either
+        }
+        if (i == 1) {
+            return true; // sequence is actually `a b m n`, remove `a`
+        }
+        if (isSafePair(line[i - 2], b, is_asc)) {
+            return true; // `y b` is legal, remove `a`
+        }
+        // neither `a` nor `b` can be removed safely
+        return false;
+    }
+    return true;
+}
+
+fn isSafeSeq(line: []const u32, comptime is_asc: bool) bool {
+    if (line.len < 2) {
+        return true;
+    }
+    for (line[0 .. line.len - 1], line[1..]) |a, b| {
+        if (!isSafePair(a, b, is_asc)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn isSafePair(a: u32, b: u32, comptime is_asc: bool) bool {
+    const max_delta = 3;
+    return if (is_asc)
+        a < b and (b - a) <= max_delta
+    else
+        b < a and (a - b) <= max_delta;
 }
 
 const test_input =
@@ -74,4 +108,18 @@ test "day02::pt1" {
 }
 test "day02::pt2" {
     try fw.t.simple(@This(), pt2, 4, test_input);
+    try fw.t.simpleMulti(@This(), pt2, .{
+        .{ 1, "30 40 41 42 43" },
+        .{ 1, "50 40 41 42 43" },
+        .{ 1, "40 30 41 42 43" },
+        .{ 1, "40 50 41 42 43" },
+        .{ 1, "40 41 30 42 43" },
+        .{ 1, "40 41 50 42 43" },
+        .{ 1, "40 41 42 30 43" },
+        .{ 1, "40 41 42 50 43" },
+        .{ 1, "40 41 42 43 30" },
+        .{ 1, "40 41 42 43 50" },
+        .{ 0, "40 40 41 42 43 30" },
+        .{ 0, "40 41 41 42 43 50" },
+    });
 }

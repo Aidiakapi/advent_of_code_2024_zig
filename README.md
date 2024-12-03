@@ -16,4 +16,4 @@ My solutions for Advent of Code 2024. Written in Zig ⚡.
     - `zig build test -Dday=12` to test day 12.
     - `zig build fw-test` for the tests under `aoc_framework`.
     - `zig build all-test` for all the tests.
-- Benchmarks? 🚤 *Not yet implemented*
+- Benchmarks? 🚤 `zig build bench`

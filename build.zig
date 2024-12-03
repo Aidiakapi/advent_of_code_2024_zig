@@ -65,4 +65,19 @@ pub fn build(b: *std.Build) void {
     const all_test_step = b.step("all-test", "Run all unit tests");
     all_test_step.dependOn(&run_exe_unit_tests.step);
     all_test_step.dependOn(&run_lib_unit_tests.step);
+
+    const exe_bench = b.addExecutable(.{
+        .name = "advent_of_code_2024",
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    exe_bench.root_module.addImport("fw", &lib.root_module);
+    exe_bench.root_module.addImport("config", options_mod);
+    exe_bench.linkLibrary(lib);
+
+    const bench_cmd = b.addRunArtifact(exe_bench);
+    bench_cmd.addArg("--bench");
+    const bench_step = b.step("bench", "Run the benchmarks");
+    bench_step.dependOn(&bench_cmd.step);
 }

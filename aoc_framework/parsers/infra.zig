@@ -136,39 +136,47 @@ fn unwrapStructEvalFn(comptime fn_or_struct: anytype) UnwrapStructEvalFnType(fn_
     return fn_or_struct;
 }
 
-pub fn GetPredicateFnType(TInput: type, comptime predicate: anytype) type {
-    const predicate_fn = unwrapStructEvalFn(predicate);
-    switch (@typeInfo(@TypeOf(predicate_fn))) {
+pub fn GetFnTypeFromArg(TInput: type, comptime fn_or_struct: anytype, required_return_type: ?type) type {
+    _ = TInput;
+    const func = unwrapStructEvalFn(fn_or_struct);
+    switch (@typeInfo(@TypeOf(func))) {
         .@"fn" => |fn_info| {
             if (fn_info.is_var_args) {
-                @compileError("Predicate may not take a variable argument count");
+                @compileError("Function may not take a variable argument count");
             }
-            if (fn_info.return_type != bool) {
-                @compileError("Predicate must return a bool");
+            if (required_return_type) |TRet| {
+                if (fn_info.return_type.? != TRet) {
+                    @compileError(std.fmt.comptimePrint(
+                        "Function must return '{s}', but returns '{s}'",
+                        .{ @typeName(TRet), @typeName(fn_info.return_type.?) },
+                    ));
+                }
             }
             if (fn_info.params.len != 1) {
-                @compileError("Predicate must take a single parameter");
+                @compileError("Function must take a single parameter");
             }
-            if (fn_info.params[0].type != TInput) {
-                @compileError(
-                    std.fmt.comptimePrint(
-                        "Predicate should take type '{s}' as input, but it takes '{s}' instead",
-                        .{ @typeName(TInput), @typeName(fn_info.params[0].type) },
-                    ),
-                );
-            }
-            return @TypeOf(predicate_fn);
+            return @TypeOf(func);
         },
         else => @compileError(
             std.fmt.comptimePrint(
                 "Expected a fn or struct with a fn named 'eval', but got: {s}",
-                .{@typeName(predicate_fn)},
+                .{@typeName(func)},
             ),
         ),
     }
 }
-pub fn getPredicateFn(TInput: type, comptime predicate: anytype) GetPredicateFnType(TInput, predicate) {
-    return unwrapStructEvalFn(predicate);
+
+pub fn getFnFromArg(TInput: type, comptime fn_or_struct: anytype, required_return_type: ?type) GetFnTypeFromArg(TInput, fn_or_struct, required_return_type) {
+    return unwrapStructEvalFn(fn_or_struct);
+}
+
+pub fn GetFnFromArgReturnType(TInput: type, comptime fn_or_struct: anytype) type {
+    const FnType = GetFnTypeFromArg(TInput, fn_or_struct, null);
+    return @typeInfo(FnType).@"fn".return_type.?;
+}
+
+pub fn WithoutOptional(T: type) type {
+    return @typeInfo(T).optional.child;
 }
 
 pub inline fn assertIsTuple(T: type, comptime min_length: ?comptime_int, comptime max_length: ?comptime_int) void {

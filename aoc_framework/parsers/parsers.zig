@@ -65,6 +65,16 @@ pub fn Parser(comptime parse_fn: anytype) type {
         }
 
         // combi
+        pub fn withValue(_: @This(), comptime value: anytype) Parser(
+            combi.withValue(Output, @TypeOf(value), impl, value),
+        ) {
+            return .{};
+        }
+
+        pub fn opt(_: @This()) Parser(combi.opt(Output, impl)) {
+            return .{};
+        }
+
         pub fn then(_: @This(), parser: anytype) Parser(
             combi.then(Output, infra.ResultFromParser(parser), impl, infra.parseFnFromParser(parser)),
         ) {
@@ -83,8 +93,36 @@ pub fn Parser(comptime parse_fn: anytype) type {
             return .{};
         }
 
+        pub fn orElse(_: @This(), parser: anytype) Parser(
+            combi.orElse(Output, impl, infra.parseFnFromParser(parser)),
+        ) {
+            return .{};
+        }
+
+        pub fn map(_: @This(), comptime map_fn: anytype) Parser(
+            combi.map(
+                Output,
+                infra.GetFnFromArgReturnType(Output, map_fn),
+                impl,
+                infra.getFnFromArg(Output, map_fn, null),
+            ),
+        ) {
+            return .{};
+        }
+
         pub fn filter(_: @This(), comptime predicate: anytype) Parser(
-            combi.filter(Output, impl, infra.getPredicateFn(Output, predicate)),
+            combi.filter(Output, impl, infra.getFnFromArg(Output, predicate, bool)),
+        ) {
+            return .{};
+        }
+
+        pub fn filterMap(_: @This(), comptime filter_fn: anytype) Parser(
+            combi.filterMap(
+                Output,
+                infra.WithoutOptional(infra.GetFnFromArgReturnType(Output, filter_fn)),
+                impl,
+                infra.getFnFromArg(Output, filter_fn, null),
+            ),
         ) {
             return .{};
         }

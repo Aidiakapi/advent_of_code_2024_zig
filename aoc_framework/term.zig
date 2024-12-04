@@ -180,6 +180,14 @@ fn printColorStr(writer: anytype, comptime color_str: []const u8) !void {
     @compileError(std.fmt.comptimePrint("Unknown color string: \"{s}\"", .{color_str}));
 }
 
+pub fn hide_cursor() []const u8 {
+    return [1]u8{ESC} ++ "[?25l";
+}
+
+pub fn show_cursor() []const u8 {
+    return [1]u8{ESC} ++ "[?25h";
+}
+
 pub fn reset() []const u8 {
     return [1]u8{ESC} ++ "[0m";
 }

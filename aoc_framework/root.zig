@@ -35,8 +35,9 @@ pub fn run(comptime days: anytype) !void {
 
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
+    _ = try bw.write(term.hide_cursor());
     defer {
-        _ = bw.write(term.reset()) catch {};
+        _ = bw.write(comptime term.reset() ++ term.show_cursor()) catch {};
         bw.flush() catch {};
     }
     const stdout: Writer = bw.writer();
@@ -328,7 +329,10 @@ fn benchFn(bw: *BufferedWriter, allocator: std.mem.Allocator, comptime day_name:
     for (costs) |cost| sum += cost;
     const mean: u64 = @intCast((sum + costs.len / 2) / costs.len);
     var sd_sum: u128 = 0;
-    for (costs) |cost| sd_sum += @abs(@as(i128, cost) - @as(i128, mean));
+    for (costs) |cost| {
+        const delta = @as(i128, cost) - @as(i128, mean);
+        sd_sum += @intCast(delta * delta);
+    }
     const sd_avg = (sd_sum + (costs.len - 1) / 2) / (costs.len - 1);
     const sd: u64 = @intFromFloat(@sqrt(@as(f128, @floatFromInt(sd_avg))));
     try printTime(stdout, "median", median);

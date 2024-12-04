@@ -189,14 +189,19 @@ fn gridImpl(
             var remainder = input;
             var pre_sep_remainder = input;
             end_of_grid: while (true) {
+                var is_first_column = true;
                 end_of_row: while (true) {
                     const item = parseItem(ctx, remainder);
                     switch (item.result) {
                         .failure => {
                             remainder = pre_sep_remainder;
+                            if (is_first_column) {
+                                break :end_of_grid;
+                            }
                             break :end_of_row;
                         },
                         .success => |value| {
+                            is_first_column = false;
                             builder.pushItem(value) catch |err| {
                                 builder.deinit();
                                 return makeError(remainder, err);
@@ -213,17 +218,17 @@ fn gridImpl(
                     }
                 }
 
-                builder.advanceToNextRow() catch |err| {
-                    builder.deinit();
-                    return makeError(remainder, err);
-                };
-
                 pre_sep_remainder = remainder;
                 const row_sep = parseRowSep(ctx, remainder);
                 switch (row_sep.result) {
                     .failure => break :end_of_grid,
                     .success => remainder = row_sep.location,
                 }
+
+                builder.advanceToNextRow() catch |err| {
+                    builder.deinit();
+                    return makeError(remainder, err);
+                };
             }
 
             const output = builder.toOwned() catch |err| {

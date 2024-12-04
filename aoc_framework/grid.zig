@@ -7,6 +7,16 @@ pub const BuildGridError = error{
     RowTooLong,
 };
 
+fn indexCast(index: anytype) ?usize {
+    return std.math.cast(usize, index);
+}
+
+fn coordCast(coord: anytype) ?[2]usize {
+    const x = indexCast(coord[0]) orelse return null;
+    const y = indexCast(coord[1]) orelse return null;
+    return [2]usize{ x, y };
+}
+
 pub fn DenseGrid(T: type) type {
     return struct {
         const Self = @This();
@@ -23,22 +33,34 @@ pub fn DenseGrid(T: type) type {
         width: usize,
         height: usize,
 
-        fn tryGetImpl(self: *Self, x: usize, y: usize) ?*T {
-            return if (x < self.width or y < self.height)
-                (self.items.ptr + (y * self.width + x))
+        pub fn indexFromCoord(self: Self, coord: anytype) ?usize {
+            const v = coordCast(coord) orelse return null;
+            return if (v[0] < self.width and v[1] < self.height)
+                (v[1] * self.width + v[0])
             else
                 null;
         }
 
-        pub fn tryGet(self: *Self, index: anytype) ?*T {
-            return if (index[0] >= 0 and index[0] <= max_usize and index[1] >= 0 and index[1] <= max_usize)
-                tryGetImpl(self, @intCast(index[0]), @intCast(index[1]))
+        pub fn coordFromIndex(self: Self, index: anytype) ?[2]@TypeOf(index) {
+            std.debug.assert(@typeInfo(@TypeOf(index)) == .int);
+            const v = indexCast(index) orelse return null;
+            if (v >= self.items.len) {
+                return null;
+            }
+            const x: @TypeOf(index) = @intCast(v % self.width);
+            const y: @TypeOf(index) = @intCast(v / self.width);
+            return .{ x, y };
+        }
+
+        pub fn tryGet(self: Self, coord: anytype) ?*T {
+            return if (indexFromCoord(self, coord)) |index|
+                &self.items[index]
             else
                 null;
         }
 
-        pub fn get(self: *Self, index: anytype) *T {
-            return self.tryGet(index) orelse unreachable;
+        pub fn get(self: Self, coord: anytype) *T {
+            return self.tryGet(coord) orelse unreachable;
         }
 
         pub fn free(self: *Self, allocator: std.mem.Allocator) void {

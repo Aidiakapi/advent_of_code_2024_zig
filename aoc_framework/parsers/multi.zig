@@ -43,6 +43,38 @@ pub fn sepBy(T: type, TSep: type, comptime value: ParseFn(T), comptime separator
     }.parse;
 }
 
+fn allOfImpl(Output: type, comptime parsers: anytype) ParseFn(Output) {
+    const info = @typeInfo(Output).@"struct";
+    infra.assertIsTuple(@TypeOf(parsers), info.fields.len, info.fields.len);
+
+    return struct {
+        fn parse(ctx: ParseContext, input: []const u8) ParseResult(Output) {
+            var remainder = input;
+            var compound: Output = undefined;
+            inline for (parsers, info.fields) |parser, field| {
+                const output = infra.parseFnFromParser(parser)(ctx, remainder);
+                const value = switch (output.result) {
+                    .success => |v| v,
+                    .failure => |err| return .{
+                        .result = .{ .failure = err },
+                        .location = output.location,
+                    },
+                };
+                @field(compound, field.name) = value;
+                remainder = output.location;
+            }
+            return .{
+                .result = .{ .success = compound },
+                .location = remainder,
+            };
+        }
+    }.parse;
+}
+
+pub fn allOf(Output: type, comptime parsers: anytype) Parser(allOfImpl(Output, parsers)) {
+    return .{};
+}
+
 pub fn OneOfType(comptime parsers: anytype) type {
     infra.assertIsTuple(@TypeOf(parsers), 1, null);
     const ResultType = infra.ResultFromParser(parsers[0]);

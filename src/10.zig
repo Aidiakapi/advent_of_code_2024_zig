@@ -54,7 +54,7 @@ fn pts(grid: InputGrid, allocator: std.mem.Allocator, context: anytype) u32 {
         .width = grid.width,
         .height = grid.height,
     };
-    defer intermediate.free(allocator);
+    defer intermediate.deinit(allocator);
     @memset(intermediate.items, 0);
 
     for (grid.items, intermediate.items) |in, *out| {

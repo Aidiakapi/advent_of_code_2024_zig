@@ -212,6 +212,26 @@ pub const BitGrid = struct {
         }
         return total;
     }
+
+    pub fn countLeadingZeroes(self: Self) usize {
+        for (self.getBitSetSlice(), 0..) |bits, i| {
+            const tz = @ctz(bits);
+            if (tz < 64) {
+                return i * 64 + tz;
+            }
+        }
+        return self.len;
+    }
+
+    pub fn countLeadingOnes(self: Self) usize {
+        for (self.getBitSetSlice(), 0..) |bits, i| {
+            const tz = @ctz(~bits);
+            if (tz < 64) {
+                return i * 64 + tz;
+            }
+        }
+        return self.len;
+    }
 };
 
 pub const BitGridBuilder = ConsecutiveGridBuilderImpl(bool, BitGrid, struct {

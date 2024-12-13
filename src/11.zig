@@ -9,43 +9,55 @@ pub fn parse(ctx: fw.p.ParseContext) ?[]Int {
     return p.nr(Int).sepBy(p.literal(' ')).execute(ctx);
 }
 
-pub fn pt1(numbers: []Int, allocator: Allocator) Int {
+pub fn pt1(numbers: []Int, allocator: Allocator) !Int {
     return pts(numbers, 25, allocator);
 }
 
-pub fn pt2(numbers: []Int, allocator: Allocator) Int {
+pub fn pt2(numbers: []Int, allocator: Allocator) !Int {
     return pts(numbers, 75, allocator);
 }
 
-const Cache = std.AutoHashMap(struct { Int, u32 }, Int);
-fn pts(numbers: []Int, steps: u32, allocator: Allocator) Int {
-    var cache = Cache.init(allocator);
-    var total: Int = 0;
+const Table = std.AutoHashMap(Int, Int);
+fn pts(numbers: []Int, steps: u32, allocator: Allocator) !Int {
+    const initial_capacity: u32 = if (steps >= 75) 4096 else 256;
+    var table1 = Table.init(allocator);
+    defer table1.deinit();
+    try table1.ensureTotalCapacity(initial_capacity);
+    var table2 = Table.init(allocator);
+    defer table2.deinit();
+    try table2.ensureTotalCapacity(initial_capacity);
     for (numbers) |number| {
-        total += countStones(number, steps, &cache);
+        (try table1.getOrPutValue(number, 0)).value_ptr.* += 1;
     }
-    return total;
+
+    for (0..steps) |i| {
+        const source: *Table, const target: *Table = if (i % 2 == 0) .{ &table1, &table2 } else .{ &table2, &table1 };
+        target.clearRetainingCapacity();
+        var iter = source.iterator();
+        while (iter.next()) |entry| {
+            try countStones(entry.key_ptr.*, entry.value_ptr.*, target);
+        }
+    }
+
+    const result: *Table = if (steps % 2 == 0) &table1 else &table2;
+    var count: u64 = 0;
+    var iter = result.valueIterator();
+    while (iter.next()) |value| {
+        count += value.*;
+    }
+
+    return count;
 }
 
-fn countStones(number: Int, steps: u32, cache: *Cache) Int {
-    if (steps == 0) {
-        return 1;
-    }
-    if (cache.get(.{ number, steps })) |cached| {
-        return cached;
-    }
-    const stone_count = countStonesCore(number, steps, cache);
-    _ = cache.getOrPutValue(.{ number, steps }, stone_count) catch @panic("OOM");
-    return stone_count;
-}
-
-fn countStonesCore(number: Int, steps: u32, cache: *Cache) Int {
+fn countStones(number: Int, count: Int, table: *Table) !void {
     if (number == 0) {
-        return countStones(1, steps - 1, cache);
+        (try table.getOrPutValue(1, 0)).value_ptr.* += count;
+        return;
     }
     const digit_count = std.math.log10_int(number);
     if (digit_count % 2 == 0) {
-        return countStones(number * 2024, steps - 1, cache);
+        (try table.getOrPutValue(number * 2024, 0)).value_ptr.* += count;
+        return;
     }
     var base: Int = 10;
     var rem = digit_count / 2;
@@ -54,13 +66,13 @@ fn countStonesCore(number: Int, steps: u32, cache: *Cache) Int {
     }
     const left = number / base;
     const right = number % base;
-    return countStones(left, steps - 1, cache) +
-        countStones(right, steps - 1, cache);
+    (try table.getOrPutValue(left, 0)).value_ptr.* += count;
+    (try table.getOrPutValue(right, 0)).value_ptr.* += count;
 }
 
-fn ptTest(comptime steps: Int) fn (numbers: []Int, allocator: Allocator) Int {
+fn ptTest(comptime steps: Int) fn (numbers: []Int, allocator: Allocator) anyerror!Int {
     return struct {
-        fn f(numbers: []Int, allocator: Allocator) Int {
+        fn f(numbers: []Int, allocator: Allocator) !Int {
             return pts(numbers, steps, allocator);
         }
     }.f;

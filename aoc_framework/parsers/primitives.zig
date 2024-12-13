@@ -141,13 +141,14 @@ fn nrImpl(comptime Number: type) ParseFn(Number) {
             if (input.len == 0) {
                 return makeError(input, ParseError.EmptyInput);
             }
-            const is_negative = is_signed and input[0] == '-';
             var remainder = input;
-            if (is_negative) {
+            var is_negative = false;
+            if (is_signed and (input[0] == '-' or input[0] == '+')) {
                 if (remainder.len == 1) {
                     return makeError(remainder, ParseError.InvalidCharacter);
                 }
                 remainder = remainder[1..];
+                is_negative = input[0] == '-';
             }
             if (!std.ascii.isDigit(remainder[0])) {
                 return makeError(remainder, ParseError.InvalidCharacter);

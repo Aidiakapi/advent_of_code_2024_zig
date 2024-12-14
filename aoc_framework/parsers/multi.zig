@@ -43,7 +43,7 @@ pub fn sepBy(T: type, TSep: type, comptime value: ParseFn(T), comptime separator
     }.parse;
 }
 
-fn allOfImpl(Output: type, comptime parsers: anytype) ParseFn(Output) {
+fn allOfStruct(Output: type, comptime parsers: anytype) ParseFn(Output) {
     const info = @typeInfo(Output).@"struct";
     infra.assertIsTuple(@TypeOf(parsers), info.fields.len, info.fields.len);
 
@@ -69,6 +69,43 @@ fn allOfImpl(Output: type, comptime parsers: anytype) ParseFn(Output) {
             };
         }
     }.parse;
+}
+fn allOfVector(Output: type, comptime parsers: anytype) ParseFn(Output) {
+    const info = @typeInfo(Output).vector;
+    infra.assertIsTuple(@TypeOf(parsers), info.len, info.len);
+
+    return struct {
+        fn parse(ctx: ParseContext, input: []const u8) ParseResult(Output) {
+            var remainder = input;
+            var compound: Output = undefined;
+            inline for (parsers, 0..info.len) |parser, i| {
+                const output = infra.parseFnFromParser(parser)(ctx, remainder);
+                const value = switch (output.result) {
+                    .success => |v| v,
+                    .failure => |err| return .{
+                        .result = .{ .failure = err },
+                        .location = output.location,
+                    },
+                };
+                compound[i] = value;
+                remainder = output.location;
+            }
+            return .{
+                .result = .{ .success = compound },
+                .location = remainder,
+            };
+        }
+    }.parse;
+}
+fn allOfImpl(Output: type, comptime parsers: anytype) ParseFn(Output) {
+    return switch (@typeInfo(Output)) {
+        .@"struct" => allOfStruct(Output, parsers),
+        .vector => allOfVector(Output, parsers),
+        else => @compileError(std.fmt.comptimePrint(
+            "Type is not supported in allOf: {s}",
+            .{@typeName(Output)},
+        )),
+    };
 }
 
 pub fn allOf(Output: type, comptime parsers: anytype) Parser(allOfImpl(Output, parsers)) {

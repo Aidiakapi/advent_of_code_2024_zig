@@ -149,6 +149,10 @@ pub const BitGrid = struct {
         self.* = empty;
     }
 
+    pub fn clear(self: Self) void {
+        @memset(self.getBitSetSlice(), 0);
+    }
+
     pub fn getBitSetSlice(self: Self) []u64 {
         return self.bitset[0 .. (self.len + 63) / 64];
     }

@@ -8,14 +8,16 @@ pub const BuildGridError = error{
     RowTooLong,
 };
 
+pub const Coord = @Vector(2, usize);
+
 fn indexCast(index: anytype) ?usize {
     return std.math.cast(usize, index);
 }
 
-fn coordCast(coord: anytype) ?[2]usize {
+fn coordCast(coord: anytype) ?Coord {
     const x = indexCast(coord[0]) orelse return null;
     const y = indexCast(coord[1]) orelse return null;
-    return [2]usize{ x, y };
+    return Coord{ x, y };
 }
 
 pub fn DenseGrid(T: type) type {
@@ -34,9 +36,29 @@ pub fn DenseGrid(T: type) type {
         width: usize,
         height: usize,
 
+        pub fn init(width: usize, height: usize, value: T, allocator: Allocator) !Self {
+            const items = try allocator.alloc(T, width * height);
+            @memset(items, value);
+            return .{
+                .items = items,
+                .width = width,
+                .height = height,
+            };
+        }
+
         pub fn deinit(self: *Self, allocator: Allocator) void {
             allocator.free(self.items);
             self.* = empty;
+        }
+
+        pub fn clone(self: Self, allocator: Allocator) !Self {
+            const new_items = try allocator.alloc(T, self.items.len);
+            @memcpy(new_items, self.items);
+            return .{
+                .items = new_items,
+                .width = self.width,
+                .height = self.height,
+            };
         }
 
         pub fn indexFromCoordOrIndex(self: Self, coord_or_index: anytype) ?usize {
@@ -54,7 +76,7 @@ pub fn DenseGrid(T: type) type {
                 null;
         }
 
-        pub fn coordFromIndex(self: Self, index: anytype) ?[2]@TypeOf(index) {
+        pub fn coordFromIndex(self: Self, index: anytype) ?@Vector(2, @TypeOf(index)) {
             std.debug.assert(@typeInfo(@TypeOf(index)) == .int);
             const v = indexCast(index) orelse return null;
             if (v >= self.items.len) {
@@ -74,6 +96,39 @@ pub fn DenseGrid(T: type) type {
 
         pub fn get(self: Self, coord_or_index: anytype) *T {
             return self.tryGet(coord_or_index) orelse unreachable;
+        }
+
+        pub const Iterator = struct {
+            width: usize,
+            items: []T,
+            index: usize = 0,
+            x: usize = 0,
+            y: usize = 0,
+
+            pub fn next(self: *@This()) ?struct { index: usize, x: usize, y: usize, value: *T } {
+                @setRuntimeSafety(false);
+                if (self.index >= self.items.len) return null;
+                const res = .{
+                    .index = self.index,
+                    .x = self.x,
+                    .y = self.y,
+                    .value = &self.items[self.index],
+                };
+                self.index += 1;
+                self.x += 1;
+                if (self.x >= self.width) {
+                    self.x = 0;
+                    self.y += 1;
+                }
+                return res;
+            }
+        };
+        pub fn iterate(self: Self) Iterator {
+            return .{ .width = self.width, .items = self.items };
+        }
+
+        pub fn toStr(self: Self, allocator: Allocator, context: anytype, cellToChar: fn (@TypeOf(context), x: usize, y: usize, value: T) u8) ![]u8 {
+            return toStrImpl(Self, self, allocator, context, cellToChar);
         }
     };
 }
@@ -172,7 +227,7 @@ pub const BitGrid = struct {
             null;
     }
 
-    pub fn coordFromIndex(self: Self, index: anytype) ?[2]@TypeOf(index) {
+    pub fn coordFromIndex(self: Self, index: anytype) ?@Vector(2, @TypeOf(index)) {
         std.debug.assert(@typeInfo(@TypeOf(index)) == .int);
         const v = indexCast(index) orelse return null;
         if (v >= self.len) {
@@ -336,4 +391,25 @@ fn ConsecutiveGridBuilderImpl(T: type, TGrid: type, Context: type) type {
             return self.context.toOwned(width, height);
         }
     };
+}
+
+fn toStrImpl(
+    Grid: type,
+    grid: Grid,
+    allocator: Allocator,
+    context: anytype,
+    cellToChar: fn (@TypeOf(context), usize, usize, Grid.Item) u8,
+) ![]u8 {
+    if (grid.width == 0 or grid.height == 0) return &.{};
+    const stride = grid.width + 1;
+    const result = try allocator.alloc(u8, stride * grid.height - 1);
+    for (0..grid.height - 1) |y| {
+        result[stride * y + stride - 1] = '\n';
+    }
+
+    var iterator = grid.iterate();
+    while (iterator.next()) |entry| {
+        result[entry.x + entry.y * stride] = cellToChar(context, entry.x, entry.y, entry.value.*);
+    }
+    return result;
 }

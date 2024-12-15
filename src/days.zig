@@ -16,6 +16,7 @@ fn getDay(comptime day_nr: u5) ?type {
         12 => @import("12.zig"),
         13 => @import("13.zig"),
         14 => @import("14.zig"),
+        15 => @import("15.zig"),
         else => null,
     };
 }

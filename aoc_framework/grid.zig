@@ -291,6 +291,74 @@ pub const BitGrid = struct {
         }
         return self.len;
     }
+
+    const bitmap_header_size_base = 14 + 40 + 4 * 2;
+    const bitmap_header_size = (bitmap_header_size_base + 3) / 4 * 4;
+    fn getBitmapMeta(self: Self) struct { scan_line_bytes: usize, scan_line_size: usize, pixel_data_size: usize } {
+        const scan_line_bytes = (self.width + 7) / 8;
+        const scan_line_size = (scan_line_bytes + 3) / 4 * 4;
+        const pixel_data_size = scan_line_size * self.height;
+        return .{ .scan_line_bytes = scan_line_bytes, .scan_line_size = scan_line_size, .pixel_data_size = pixel_data_size };
+    }
+
+    pub fn getBitmapByteCount(self: Self) usize {
+        return bitmap_header_size + self.getBitmapMeta().pixel_data_size;
+    }
+
+    pub fn writeBitmap(self: Self, writer: anytype) @TypeOf(writer).Error!void {
+        const scan_line_bytes = (self.width + 7) / 8;
+        const scan_line_size = (scan_line_bytes + 3) / 4 * 4;
+        const pixel_data_size = scan_line_size * self.height;
+        const file_size = bitmap_header_size + pixel_data_size;
+
+        // BITMAPFILEHEADER
+        try writer.writeByte('B');
+        try writer.writeByte('M');
+        try writer.writeInt(u32, @intCast(file_size), .little); // FileSize
+        try writer.writeInt(u32, 0, .little); // reserved
+        try writer.writeInt(u32, @intCast(bitmap_header_size), .little); // DataOffset
+        // BITMAPINFOHEADER
+        try writer.writeInt(u32, 40, .little); // Size of InfoHeader
+        try writer.writeInt(u32, @intCast(self.width), .little); // Width
+        try writer.writeInt(u32, @intCast(self.height), .little); // Height
+        try writer.writeInt(u16, 1, .little); // Planes
+        try writer.writeInt(u16, 1, .little); // BitsPerPixel
+        try writer.writeInt(u32, 0, .little); // Compression, BI_RGB/no compression
+        try writer.writeInt(u32, 0, .little); // ImageSize, dummy 0 because uncompressed
+        try writer.writeInt(u32, 1024, .little); // XpixelsPerM
+        try writer.writeInt(u32, 1024, .little); // YpixelsPerM
+        try writer.writeInt(u32, 2, .little); // ColorsUsed
+        try writer.writeInt(u32, 0, .little); // ImportantColors
+        // ColorTable
+        try writer.writeAll(&[4]u8{ 0, 0, 0, 0 }); // black
+        try writer.writeAll(&[4]u8{ 255, 255, 255, 0 }); // white
+        // padding
+        for (0..bitmap_header_size - bitmap_header_size_base) |_| try writer.writeByte(0);
+
+        for (0..self.height) |fy| {
+            const y = self.height - 1 - fy;
+            var index = self.width * y;
+            for (0..self.width / 8) |_| {
+                var byte: u8 = 0;
+                for (0..8) |ox| {
+                    byte |= @as(u8, @intFromBool(self.get(index))) << @truncate(7 - ox % 8);
+                    index += 1;
+                }
+                try writer.writeByte(byte);
+            }
+            if (self.width % 8 != 0) {
+                var byte: u8 = 0;
+                for (0..self.width - (self.width / 8 * 8)) |ox| {
+                    byte |= @as(u8, @intFromBool(self.get(index))) << @truncate(7 - ox % 8);
+                    index += 1;
+                }
+                try writer.writeByte(byte);
+            }
+            for (scan_line_bytes..scan_line_size) |_| {
+                try writer.writeByte(0);
+            }
+        }
+    }
 };
 
 pub const BitGridBuilder = ConsecutiveGridBuilderImpl(bool, BitGrid, struct {

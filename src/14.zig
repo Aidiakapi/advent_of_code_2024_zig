@@ -43,58 +43,64 @@ fn positionAfter(comptime size: Vec2, robot: Robot, steps: i32) Vec2 {
     return @mod(raw, size);
 }
 
-const Grid = fw.grid.BitGrid;
 pub fn pt2(robots: []Robot, allocator: std.mem.Allocator) !usize {
+    _ = allocator;
     // try generateImages(robots, allocator);
-    var grid = try Grid.init(101, 103, allocator);
-    defer grid.deinit(allocator);
 
-    // We're looking for a little Christmas tree, which is in a 31x33 rectangle,
-    // with a solid outline, and a tree drawn inside.
-    //
-    // We use three heuristics to detect which one matches, all based on the
-    // density of bits set within the bitset.
-    // 1. Within 128-bit windows, there are at least 2 cases with 31-bits set.
-    //    These are for the top and bottom border.
-    // 2. Below at least one of these windows, there is another window with at
-    //    least 31 bits set 32 rows below it. Top and bottom border are a pair.
-    // 2. Within 128-bit windows, there are at least 11 cases with 15 bits set.
-    //    Two for top and bottom, and 9 for within the contents of the tree.
-    var match: ?usize = null;
-    const bitset = grid.getBitSetSlice();
-    for (1..101 * 103) |steps| {
-        fillGrid(robots, &grid, @intCast(steps));
-        var t15: u32 = 0;
-        var t31: u32 = 0;
-        var has_31_at_offset = false;
-        var prev: u32 = @popCount(bitset[0]);
-        for (bitset[1..], 0..) |currData, i| {
-            const curr: u32 = @popCount(currData);
-            const bits_in_window = prev + curr;
-            prev = curr;
-            if (bits_in_window < 15) continue;
-            t15 += 1;
-            if (bits_in_window < 31) continue;
-            t31 += 1;
-            // We look 32 rows down, and count if we also find a pattern of
-            // at least 31 bits there.
-            const bits_beg_min = 32 * 101 + i * 64;
-            const bits_end_max = 32 * 101 + i * 64 + 127;
-            const index_max = @min(bitset.len, bits_end_max / 64 + 1);
-            const index_min = @min(index_max, bits_beg_min / 64);
-            var bits: u32 = 0;
-            for (index_min..index_max) |j|
-                bits += @popCount(bitset[j]);
-            if (bits >= 31) has_31_at_offset = true;
-        }
-        if (has_31_at_offset and t15 >= 11 and t31 >= 2) {
-            if (match) |_| return error.MultiplePotentialSolutions;
-            match = steps;
-        }
+    const x = try getOffset(0, robots);
+    const y = try getOffset(1, robots);
+
+    // r = 101a + x = 103b + y
+    // x + 101a = y mod 103
+    // y + 103b = x mod 101
+    // simplify and pull variables to left
+    // 101a = y - x mod 103
+    //   2b = x - y mod 101
+    // 101^-1 mod 103 == 2^-1 mod 101 == 51
+    // a = 51 * (y - x) mod 103
+    // b = 51 * (x - y) mod 101
+    if (x < y) {
+        const a = @mod(51 * (y - x), 103);
+        return a * 101 + x;
+    } else {
+        const b = @mod(51 * (x - y), 101);
+        return b * 103 + y;
     }
-    return match orelse error.NoSolution;
 }
 
+fn getOffset(comptime coord_index: usize, robots: []Robot) !u32 {
+    const image_size: i32 = 101 + coord_index * 2;
+
+    // This uses the heuristic that for the correct solution, the pixels are
+    // clustered much more densely. There will be many near-empty rows/columns,
+    // and then some with *a lot* of robots.
+    // By squaring the amount of robots per row/column, the dense rows are
+    // weighted heavily, and the sparse rows are virtually irrelevant.
+    var max_score: u32 = 0;
+    var max_score_index: u32 = 0;
+
+    var data: [image_size]u8 = undefined;
+    for (0..image_size) |steps_usize| {
+        const steps: i32 = @intCast(steps_usize);
+        @memset(&data, 0);
+        for (robots) |robot| {
+            const pos = robot.position[coord_index] + steps * robot.velocity[coord_index];
+            data[@intCast(@mod(pos, image_size))] += 1;
+        }
+
+        var score: u32 = 0;
+        for (data) |value| {
+            score += @as(u32, value) * @as(u32, value);
+        }
+        if (score < max_score) continue;
+        max_score = score;
+        max_score_index = @intCast(steps);
+    }
+
+    return max_score_index;
+}
+
+const Grid = fw.grid.BitGrid;
 fn fillGrid(robots: []Robot, grid: *Grid, steps: i32) void {
     grid.clear();
     for (robots) |robot| {
@@ -107,68 +113,26 @@ fn generateImages(robots: []Robot, allocator: std.mem.Allocator) !void {
     var grid = try Grid.init(101, 103, allocator);
     defer grid.deinit(allocator);
 
-    const scan_line_size = (std.math.divCeil(comptime_int, 101, 8 * 4) catch unreachable) * 4;
-    const pixel_data_byte_count = scan_line_size * 103;
-    const headers_size_base = 14 + 40 + 4 * 2;
-    const headers_size = (std.math.divCeil(comptime_int, headers_size_base, 4) catch unreachable) * 4;
-    const file_size = headers_size + pixel_data_byte_count;
-
-    var bmp = try std.ArrayList(u8).initCapacity(allocator, file_size);
-    defer bmp.deinit();
-    const writer = bmp.fixedWriter();
-    // BITMAPFILEHEADER
-    try writer.writeByte('B');
-    try writer.writeByte('M');
-    try writer.writeInt(u32, file_size, .little); // FileSize
-    try writer.writeInt(u32, 0, .little); // reserved
-    try writer.writeInt(u32, headers_size, .little); // DataOffset
-    // BITMAPINFOHEADER
-    try writer.writeInt(u32, 40, .little); // Size of InfoHeader
-    try writer.writeInt(u32, 101, .little); // Width
-    try writer.writeInt(u32, 103, .little); // Height
-    try writer.writeInt(u16, 1, .little); // Planes
-    try writer.writeInt(u16, 1, .little); // BitsPerPixel
-    try writer.writeInt(u32, 0, .little); // Compression, BI_RGB/no compression
-    try writer.writeInt(u32, 0, .little); // ImageSize, dummy 0 because uncompressed
-    try writer.writeInt(u32, 1024, .little); // XpixelsPerM
-    try writer.writeInt(u32, 1024, .little); // YpixelsPerM
-    try writer.writeInt(u32, 2, .little); // ColorsUsed
-    try writer.writeInt(u32, 0, .little); // ImportantColors
-    // ColorTable
-    try writer.writeAll(&[4]u8{ 0, 0, 0, 0 }); // black
-    try writer.writeAll(&[4]u8{ 255, 255, 255, 0 }); // white
-    // padding
-    for (0..headers_size - headers_size_base) |_| try writer.writeByte(0);
-
-    std.debug.assert(bmp.items.len == headers_size);
-    try bmp.resize(file_size);
-
-    const pixel_data = bmp.items[headers_size..];
-
     const cwd = std.fs.cwd();
     cwd.makeDir("day14_images") catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
     const out_dir = try cwd.openDir("day14_images", .{});
+
+    var buffer = try std.ArrayList(u8).initCapacity(allocator, grid.getBitmapByteCount());
+    defer buffer.deinit();
+
     for (0..101 * 103) |steps| {
         fillGrid(robots, &grid, @intCast(steps));
-
-        @memset(pixel_data, 0);
-        for (0..103) |y| {
-            const fy = 103 - 1 - y;
-            const scan_line_data = pixel_data[fy * scan_line_size .. fy * scan_line_size + scan_line_size];
-            for (0..101) |x| {
-                if (grid.get(.{ x, y })) {
-                    scan_line_data[x / 8] |= @as(u8, 1) << @truncate(7 - x % 8);
-                }
-            }
-        }
+        try grid.writeBitmap(buffer.fixedWriter());
 
         var file_name_buf: [9]u8 = undefined;
         const file_name = try std.fmt.bufPrint(&file_name_buf, "{:0>5}.bmp", .{steps});
         const out_file = try out_dir.createFile(file_name, .{});
-        try out_file.writeAll(bmp.items);
+        defer out_file.close();
+        try out_file.writeAll(buffer.items);
+        buffer.clearRetainingCapacity();
     }
 }
 
@@ -189,7 +153,4 @@ const test_input =
 
 test "day14::pt1" {
     try fw.t.simple(@This(), pt1Impl(.{ 11, 7 }), 12, test_input);
-}
-test "day14::pt2" {
-    try fw.t.simple(@This(), pt2, void{}, test_input);
 }

@@ -1,4 +1,4 @@
-pub const ParseError = error {
+pub const ParseError = error{
     InputNotConsumed,
     EmptyInput,
     LiteralDoesNotMatch,
@@ -9,4 +9,5 @@ pub const ParseError = error {
     GridNoItems,
     GridRowTooShort,
     GridRowTooLong,
+    GridMissingPOIs,
 };

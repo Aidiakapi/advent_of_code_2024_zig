@@ -18,6 +18,12 @@ pub const ParseContext = struct {
         .report_parse_error = null,
         .user = null,
     };
+
+    pub fn report(self: ParseContext, err: ParseError, position: []const u8) void {
+        if (self.report_parse_error) |report_fn| {
+            report_fn(self, err, position);
+        }
+    }
 };
 
 pub const ParseError = @import("errors.zig").ParseError;
@@ -50,15 +56,11 @@ pub fn Parser(comptime parse_fn: anytype) type {
                     if (output.location.len == 0 or (output.location.len == 1 and output.location[0] == '\n')) {
                         return value;
                     }
-                    if (ctx.report_parse_error) |report_parse_error| {
-                        report_parse_error(ctx, ParseError.InputNotConsumed, output.location);
-                    }
+                    ctx.report(ParseError.InputNotConsumed, output.location);
                     return null;
                 },
                 .failure => |err| {
-                    if (ctx.report_parse_error) |report_parse_error| {
-                        report_parse_error(ctx, err, output.location);
-                    }
+                    ctx.report(err, output.location);
                     return null;
                 },
             }
@@ -140,6 +142,7 @@ pub const allOf = multi.allOf;
 pub const oneOf = multi.oneOf;
 pub const oneOfValues = multi.oneOfValues;
 pub const grid = multi.grid;
+pub const gridWithPOIs = multi.gridWithPOIs;
 
 test {
     _ = &combi;

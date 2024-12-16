@@ -99,16 +99,17 @@ pub fn DenseGrid(T: type) type {
         }
 
         pub const Iterator = struct {
+            pub const IterItem = struct { index: usize, x: usize, y: usize, value: *T };
             width: usize,
             items: []T,
             index: usize = 0,
             x: usize = 0,
             y: usize = 0,
 
-            pub fn next(self: *@This()) ?struct { index: usize, x: usize, y: usize, value: *T } {
+            pub fn next(self: *@This()) ?IterItem {
                 @setRuntimeSafety(false);
                 if (self.index >= self.items.len) return null;
-                const res = .{
+                const res = IterItem{
                     .index = self.index,
                     .x = self.x,
                     .y = self.y,
@@ -123,11 +124,11 @@ pub fn DenseGrid(T: type) type {
                 return res;
             }
         };
-        pub fn iterate(self: Self) Iterator {
+        pub fn iterate(self: *const Self) Iterator {
             return .{ .width = self.width, .items = self.items };
         }
 
-        pub fn toStr(self: Self, allocator: Allocator, context: anytype, cellToChar: fn (@TypeOf(context), x: usize, y: usize, value: T) u8) ![]u8 {
+        pub fn toStr(self: *const Self, allocator: Allocator, context: anytype, cellToChar: fn (@TypeOf(context), Iterator.IterItem) u8) ![]u8 {
             return toStrImpl(Self, self, allocator, context, cellToChar);
         }
     };
@@ -292,6 +293,54 @@ pub const BitGrid = struct {
         return self.len;
     }
 
+    pub const Iterator = struct {
+        pub const IterItem = struct { index: usize, x: usize, y: usize, value: bool };
+        grid: *const BitGrid,
+        index: usize = 0,
+        x: usize = 0,
+        y: usize = 0,
+
+        pub fn next(self: *@This()) ?IterItem {
+            @setRuntimeSafety(false);
+            if (self.index >= self.grid.len) return null;
+            const res = IterItem{
+                .index = self.index,
+                .x = self.x,
+                .y = self.y,
+                .value = self.grid.get(self.index),
+            };
+            self.index += 1;
+            self.x += 1;
+            if (self.x >= self.grid.width) {
+                self.x = 0;
+                self.y += 1;
+            }
+            return res;
+        }
+    };
+    pub fn iterate(self: *const Self) Iterator {
+        return .{ .grid = self };
+    }
+
+    pub fn toStrSimple(self: *const Self, allocator: Allocator, falseChar: u8, trueChar: u8) ![]u8 {
+        const Context = struct {
+            falseChar: u8,
+            trueChar: u8,
+            fn cellToChar(ctx: @This(), item: Iterator.IterItem) u8 {
+                return if (item.value) ctx.trueChar else ctx.falseChar;
+            }
+        };
+        return self.toStr(
+            allocator,
+            Context{ .falseChar = falseChar, .trueChar = trueChar },
+            Context.cellToChar,
+        );
+    }
+
+    pub fn toStr(self: *const Self, allocator: Allocator, context: anytype, cellToChar: fn (@TypeOf(context), item: Iterator.IterItem) u8) ![]u8 {
+        return toStrImpl(Self, self, allocator, context, cellToChar);
+    }
+
     const bitmap_header_size_base = 14 + 40 + 4 * 2;
     const bitmap_header_size = (bitmap_header_size_base + 3) / 4 * 4;
     fn getBitmapMeta(self: Self) struct { scan_line_bytes: usize, scan_line_size: usize, pixel_data_size: usize } {
@@ -379,7 +428,7 @@ pub const BitGridBuilder = ConsecutiveGridBuilderImpl(bool, BitGrid, struct {
 
     fn push(self: *Self, value: bool) void {
         if (self.bit_index == 0) {
-            _ = self.items.addOne() catch @panic("OOM");
+            (self.items.addOne() catch @panic("OOM")).* = 0;
         }
         if (value) {
             const i = self.items.items;
@@ -389,12 +438,17 @@ pub const BitGridBuilder = ConsecutiveGridBuilderImpl(bool, BitGrid, struct {
     }
 
     fn len(self: Self) usize {
-        return self.items.items.len * 64 + self.bit_index;
+        return if (self.bit_index == 0)
+            self.items.items.len * 64
+        else
+            self.items.items.len * 64 + self.bit_index - 64;
     }
 
     fn toOwned(self: *Self, width: usize, height: usize) BuildGridError!BitGrid {
+        const slice = self.items.toOwnedSlice() catch @panic("OOM");
         return BitGrid{
-            .items = self.items.toOwnedSlice() catch @panic("OOM"),
+            .bitset = slice.ptr,
+            .len = width * height,
             .width = width,
             .height = height,
         };
@@ -446,6 +500,14 @@ fn ConsecutiveGridBuilderImpl(T: type, TGrid: type, Context: type) type {
             self.x = 0;
         }
 
+        pub fn getNextItemCoord(self: *Self) Coord {
+            const y = if (self.width) |width|
+                self.context.len() / width
+            else
+                0;
+            return .{ self.x, y };
+        }
+
         pub fn toOwned(self: *Self) BuildGridError!Grid {
             errdefer self.deinit();
             if (self.x != 0) {
@@ -463,10 +525,10 @@ fn ConsecutiveGridBuilderImpl(T: type, TGrid: type, Context: type) type {
 
 fn toStrImpl(
     Grid: type,
-    grid: Grid,
+    grid: *const Grid,
     allocator: Allocator,
     context: anytype,
-    cellToChar: fn (@TypeOf(context), usize, usize, Grid.Item) u8,
+    cellToChar: fn (@TypeOf(context), Grid.Iterator.IterItem) u8,
 ) ![]u8 {
     if (grid.width == 0 or grid.height == 0) return &.{};
     const stride = grid.width + 1;
@@ -477,7 +539,7 @@ fn toStrImpl(
 
     var iterator = grid.iterate();
     while (iterator.next()) |entry| {
-        result[entry.x + entry.y * stride] = cellToChar(context, entry.x, entry.y, entry.value.*);
+        result[entry.x + entry.y * stride] = cellToChar(context, entry);
     }
     return result;
 }

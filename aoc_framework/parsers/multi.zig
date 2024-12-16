@@ -43,69 +43,70 @@ pub fn sepBy(T: type, TSep: type, comptime value: ParseFn(T), comptime separator
     }.parse;
 }
 
-fn allOfStruct(Output: type, comptime parsers: anytype) ParseFn(Output) {
-    const info = @typeInfo(Output).@"struct";
-    infra.assertIsTuple(@TypeOf(parsers), info.fields.len, info.fields.len);
-
+fn MultiOutputHelperStruct(Output: type) type {
+    const fields = @typeInfo(Output).@"struct".fields;
     return struct {
-        fn parse(ctx: ParseContext, input: []const u8) ParseResult(Output) {
-            var remainder = input;
-            var compound: Output = undefined;
-            inline for (parsers, info.fields) |parser, field| {
-                const output = infra.parseFnFromParser(parser)(ctx, remainder);
-                const value = switch (output.result) {
-                    .success => |v| v,
-                    .failure => |err| return .{
-                        .result = .{ .failure = err },
-                        .location = output.location,
-                    },
-                };
-                @field(compound, field.name) = value;
-                remainder = output.location;
-            }
-            return .{
-                .result = .{ .success = compound },
-                .location = remainder,
-            };
-        }
-    }.parse;
-}
-fn allOfVector(Output: type, comptime parsers: anytype) ParseFn(Output) {
-    const info = @typeInfo(Output).vector;
-    infra.assertIsTuple(@TypeOf(parsers), info.len, info.len);
+        const Self = @This();
+        const count: comptime_int = fields.len;
+        output: Output = undefined,
 
-    return struct {
-        fn parse(ctx: ParseContext, input: []const u8) ParseResult(Output) {
-            var remainder = input;
-            var compound: Output = undefined;
-            inline for (parsers, 0..info.len) |parser, i| {
-                const output = infra.parseFnFromParser(parser)(ctx, remainder);
-                const value = switch (output.result) {
-                    .success => |v| v,
-                    .failure => |err| return .{
-                        .result = .{ .failure = err },
-                        .location = output.location,
-                    },
-                };
-                compound[i] = value;
-                remainder = output.location;
-            }
-            return .{
-                .result = .{ .success = compound },
-                .location = remainder,
-            };
+        pub fn set(self: *Self, comptime index: usize, value: anytype) void {
+            @field(self.output, fields[index].name) = value;
         }
-    }.parse;
-}
-fn allOfImpl(Output: type, comptime parsers: anytype) ParseFn(Output) {
-    return switch (@typeInfo(Output)) {
-        .@"struct" => allOfStruct(Output, parsers),
-        .vector => allOfVector(Output, parsers),
-        else => @compileError(std.fmt.comptimePrint(
-            "Type is not supported in allOf: {s}",
-            .{@typeName(Output)},
-        )),
     };
+}
+
+fn MultiOutputHelperVector(Output: type) type {
+    const info = @typeInfo(Output).vector;
+    return struct {
+        const Self = @This();
+        const count: comptime_int = info.len;
+        output: Output = undefined,
+
+        pub fn set(self: *Self, comptime index: usize, value: anytype) void {
+            self.output[index] = value;
+        }
+    };
+}
+
+const MultiOutputHelperVoid = struct {
+    const count: comptime_int = 0;
+    output: void = void{},
+};
+
+fn MultiOutputHelper(Output: type) type {
+    return switch (@typeInfo(Output)) {
+        .@"struct" => MultiOutputHelperStruct(Output),
+        .vector => MultiOutputHelperVector(Output),
+        .void => MultiOutputHelperVoid,
+        else => @compileError(std.fmt.comptimePrint("Type is not supported as output type: {s}", .{@typeName(Output)})),
+    };
+}
+
+fn allOfImpl(Output: type, comptime parsers: anytype) ParseFn(Output) {
+    const Helper = MultiOutputHelper(Output);
+    return struct {
+        fn parse(ctx: ParseContext, input: []const u8) ParseResult(Output) {
+            var remainder = input;
+            var helper = Helper{};
+            inline for (parsers, 0..Helper.count) |parser, index| {
+                const output = infra.parseFnFromParser(parser)(ctx, remainder);
+                const value = switch (output.result) {
+                    .success => |v| v,
+                    .failure => |err| return .{
+                        .result = .{ .failure = err },
+                        .location = output.location,
+                    },
+                };
+                remainder = output.location;
+                helper.set(index, value);
+            }
+            return .{
+                .result = .{ .success = helper.output },
+                .location = remainder,
+            };
+        }
+    }.parse;
 }
 
 pub fn allOf(Output: type, comptime parsers: anytype) Parser(allOfImpl(Output, parsers)) {
@@ -239,9 +240,54 @@ fn gridImpl(
     comptime parseColSep: ParseFn(TColSep),
     comptime parseRowSep: ParseFn(TRowSep),
 ) ParseFn(Grid) {
-    const Builder = Grid.Builder;
+    const underlying = gridWithPOIsImpl(
+        Grid,
+        TColSep,
+        TRowSep,
+        parseItem,
+        parseColSep,
+        parseRowSep,
+        void,
+        undefined,
+        .{},
+    );
     return struct {
-        fn makeError(location: []const u8, err: grid_mod.BuildGridError) ParseResult(Grid) {
+        fn parse(ctx: ParseContext, input: []const u8) ParseResult(Grid) {
+            const res = underlying(ctx, input);
+            switch (res.result) {
+                .success => |value| return .{
+                    .result = .{ .success = value[0] },
+                    .location = res.location,
+                },
+                .failure => |err| return .{
+                    .result = .{ .failure = err },
+                    .location = res.location,
+                },
+            }
+        }
+    }.parse;
+}
+
+fn GridWithPOIsResult(Grid: type, TPOIs: type) type {
+    return struct { Grid, TPOIs };
+}
+fn gridWithPOIsImpl(
+    Grid: type,
+    TColSep: type,
+    TRowSep: type,
+    comptime parseItem: ParseFn(Grid.Item),
+    comptime parseColSep: ParseFn(TColSep),
+    comptime parseRowSep: ParseFn(TRowSep),
+    TPOIs: type,
+    comptime poi_substitution: Grid.Item,
+    comptime poi_parsers: anytype,
+) ParseFn(GridWithPOIsResult(Grid, TPOIs)) {
+    const Builder = Grid.Builder;
+    const Helper = MultiOutputHelper(TPOIs);
+    const Result = GridWithPOIsResult(Grid, TPOIs);
+    infra.assertIsTuple(@TypeOf(poi_parsers), Helper.count, Helper.count);
+    return struct {
+        fn makeError(location: []const u8, err: grid_mod.BuildGridError) ParseResult(Result) {
             return .{
                 .result = .{ .failure = switch (err) {
                     grid_mod.BuildGridError.NoItems => ParseError.GridNoItems,
@@ -252,7 +298,10 @@ fn gridImpl(
             };
         }
 
-        fn parse(ctx: ParseContext, input: []const u8) ParseResult(Grid) {
+        fn parse(ctx: ParseContext, input: []const u8) ParseResult(Result) {
+            const BitSet = std.bit_set.IntegerBitSet(@intCast(Helper.count));
+            var pois_found = BitSet.initEmpty();
+            var pois_helper = Helper{};
             var builder = Builder.init(ctx.allocator);
 
             var remainder = input;
@@ -262,7 +311,24 @@ fn gridImpl(
                 end_of_row: while (true) {
                     const item = parseItem(ctx, remainder);
                     switch (item.result) {
-                        .failure => {
+                        .failure => failure_handler: {
+                            inline for (poi_parsers, 0..) |poi_parser, i| {
+                                if (!pois_found.isSet(i)) {
+                                    const poi_res = infra.parseFnFromParser(poi_parser)(ctx, remainder);
+                                    if (poi_res.result == .success) {
+                                        remainder = poi_res.location;
+                                        pois_found.set(i);
+                                        pois_helper.set(i, builder.getNextItemCoord());
+                                        builder.pushItem(poi_substitution) catch |err| {
+                                            builder.deinit();
+                                            return makeError(remainder, err);
+                                        };
+                                        remainder = poi_res.location;
+                                        break :failure_handler;
+                                    }
+                                }
+                            }
+
                             remainder = pre_sep_remainder;
                             if (is_first_column) {
                                 break :end_of_grid;
@@ -270,15 +336,15 @@ fn gridImpl(
                             break :end_of_row;
                         },
                         .success => |value| {
-                            is_first_column = false;
                             builder.pushItem(value) catch |err| {
                                 builder.deinit();
                                 return makeError(remainder, err);
                             };
+                            remainder = item.location;
                         },
                     }
 
-                    remainder = item.location;
+                    is_first_column = false;
                     pre_sep_remainder = remainder;
                     const col_sep = parseColSep(ctx, remainder);
                     switch (col_sep.result) {
@@ -303,8 +369,14 @@ fn gridImpl(
             const output = builder.toOwned() catch |err| {
                 return makeError(remainder, err);
             };
+            if (!pois_found.eql(BitSet.initFull())) {
+                return .{
+                    .result = .{ .failure = ParseError.GridMissingPOIs },
+                    .location = remainder,
+                };
+            }
             return .{
-                .result = .{ .success = output },
+                .result = .{ .success = .{ output, pois_helper.output } },
                 .location = remainder,
             };
         }
@@ -322,6 +394,28 @@ pub fn grid(
     infra.parseFnFromParser(parse_item),
     infra.parseFnFromParser(parse_col_sep),
     infra.parseFnFromParser(parse_row_sep),
+)) {
+    return .{};
+}
+
+pub fn gridWithPOIs(
+    Grid: type,
+    comptime parse_item: anytype,
+    comptime parse_col_sep: anytype,
+    comptime parse_row_sep: anytype,
+    POIs: type,
+    comptime poi_substitution: Grid.Item,
+    comptime parse_pois: anytype,
+) Parser(gridWithPOIsImpl(
+    Grid,
+    infra.ResultFromParser(parse_col_sep),
+    infra.ResultFromParser(parse_row_sep),
+    infra.parseFnFromParser(parse_item),
+    infra.parseFnFromParser(parse_col_sep),
+    infra.parseFnFromParser(parse_row_sep),
+    POIs,
+    poi_substitution,
+    parse_pois,
 )) {
     return .{};
 }

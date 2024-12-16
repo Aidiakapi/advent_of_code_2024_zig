@@ -179,7 +179,12 @@ pub fn WithoutOptional(T: type) type {
     return @typeInfo(T).optional.child;
 }
 
-pub inline fn assertIsTuple(T: type, comptime min_length: ?comptime_int, comptime max_length: ?comptime_int) void {
+pub fn getTupleLength(T: type, comptime min_length: ?comptime_int, comptime max_length: ?comptime_int) usize {
+    assertIsTuple(T, min_length, max_length);
+    return @typeInfo(T).@"struct".fields.len;
+}
+
+pub fn assertIsTuple(T: type, comptime min_length: ?comptime_int, comptime max_length: ?comptime_int) void {
     switch (@typeInfo(T)) {
         .@"struct" => |s| if (s.is_tuple) {
             if (min_length) |min_len| {

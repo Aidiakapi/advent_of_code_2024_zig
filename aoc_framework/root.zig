@@ -170,7 +170,12 @@ fn printParseError(ctx: p.ParseContext, err: p.ParseError, location: []const u8)
 }
 
 fn printPartOutput(stdout: Writer, value: anytype) !void {
-    try term.format(stdout, "{<white>}{: >20}{<reset>}", .{value});
+    const T = @TypeOf(value);
+    if (T == []u8) {
+        return term.format(stdout, "{<white>}{s: >20}{<reset>}", .{value});
+    }
+
+    return term.format(stdout, "{<white>}{any: >20}{<reset>}", .{value});
 }
 
 fn benchDay(

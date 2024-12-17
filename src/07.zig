@@ -56,7 +56,7 @@ fn canMakeCorrect(comptime allow_concat: bool, entry: Entry) bool {
     return @call(
         .always_tail,
         canMakeCorrect,
-        .{ allow_concat, .{ .total = entry.total - v, .nrs = rem } },
+        .{ allow_concat, Entry{ .total = entry.total - v, .nrs = rem } },
     );
 }
 

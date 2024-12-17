@@ -3,7 +3,7 @@
 My solutions for Advent of Code 2024. Written in Zig ⚡.
 
 - Clone the repository.
-- Make sure you have a master version of Zig around December 2024.
+- Make sure you have Zig 0.14.0-dev.2497+8f330ab70.
 - `zig build run -Doptimize=ReleaseSafe` for all days.  
   `zig build run -Doptimize=ReleaseSafe -Dday=12` for a day 12.
 - Want your own inputs?

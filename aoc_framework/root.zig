@@ -12,6 +12,7 @@ const Platform = switch (@import("builtin").target.os.tag) {
 pub const p = @import("parsers/parsers.zig");
 pub const t = @import("testing.zig");
 pub const grid = @import("grid.zig");
+pub const astar = @import("astar.zig");
 
 const BufferedWriter = std.io.BufferedWriter(4096, std.fs.File.Writer);
 const Writer = BufferedWriter.Writer;

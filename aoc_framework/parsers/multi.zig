@@ -232,6 +232,32 @@ test "parsing::multi::oneOfValues" {
     }, parser.executeRaw(ParseContext.testing, "herro wolld"));
 }
 
+fn takeWhileImpl(comptime filterFn: fn (u8) bool) ParseFn([]const u8) {
+    return struct {
+        fn parse(_: ParseContext, input: []const u8) ParseResult([]const u8) {
+            var i: usize = 0;
+            while (i < input.len) : (i += 1) {
+                if (!filterFn(input[i])) break;
+            }
+            if (i == 0) {
+                const err = if (input.len == 0) ParseError.EmptyInput else ParseError.NoneMatch;
+                return .{
+                    .result = .{ .failure = err },
+                    .location = input,
+                };
+            }
+            return .{
+                .result = .{ .success = input[0..i] },
+                .location = input[i..],
+            };
+        }
+    }.parse;
+}
+
+pub fn takeWhile(comptime filterFn: fn (u8) bool) Parser(takeWhileImpl(filterFn)) {
+    return .{};
+}
+
 fn gridImpl(
     Grid: type,
     TColSep: type,

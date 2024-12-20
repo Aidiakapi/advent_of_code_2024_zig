@@ -161,7 +161,7 @@ pub fn AStar(Context: type, comptime config: AStarConfig) type {
             while (self.min_heap.removeOrNull()) |entry| {
                 if (config.path == .all) {
                     if (min) |min_value| {
-                        if (entry.cost > min_value[1]) {
+                        if (entry.cost_with_heuristic > min_value[1]) {
                             break;
                         }
                     }

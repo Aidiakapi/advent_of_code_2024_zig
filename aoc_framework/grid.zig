@@ -293,6 +293,14 @@ pub const BitGrid = struct {
         return self.len;
     }
 
+    pub fn invert(self: Self) void {
+        const slice = self.getBitSetSlice();
+        for (slice) |*v| v.* = ~v.*;
+        const bits_in_last: u6 = @truncate(self.len);
+        if (bits_in_last == 0) return;
+        slice[slice.len - 1] &= (@as(u64, 1) << bits_in_last) - 1;
+    }
+
     pub const Iterator = struct {
         pub const IterItem = struct { index: usize, x: usize, y: usize, value: bool };
         grid: *const BitGrid,
@@ -350,15 +358,21 @@ pub const BitGrid = struct {
         return .{ .scan_line_bytes = scan_line_bytes, .scan_line_size = scan_line_size, .pixel_data_size = pixel_data_size };
     }
 
+    pub fn toBitmap(self: Self, allocator: Allocator) ![]u8 {
+        const size = self.getBitmapByteCount();
+        var data = try allocator.alloc(u8, size);
+        var stream = std.io.fixedBufferStream(data[0..]);
+        self.writeBitmap(stream.writer()) catch unreachable;
+        return data;
+    }
+
     pub fn getBitmapByteCount(self: Self) usize {
         return bitmap_header_size + self.getBitmapMeta().pixel_data_size;
     }
 
     pub fn writeBitmap(self: Self, writer: anytype) @TypeOf(writer).Error!void {
-        const scan_line_bytes = (self.width + 7) / 8;
-        const scan_line_size = (scan_line_bytes + 3) / 4 * 4;
-        const pixel_data_size = scan_line_size * self.height;
-        const file_size = bitmap_header_size + pixel_data_size;
+        const meta = self.getBitmapMeta();
+        const file_size = bitmap_header_size + meta.pixel_data_size;
 
         // BITMAPFILEHEADER
         try writer.writeByte('B');
@@ -403,10 +417,18 @@ pub const BitGrid = struct {
                 }
                 try writer.writeByte(byte);
             }
-            for (scan_line_bytes..scan_line_size) |_| {
+            for (meta.scan_line_bytes..meta.scan_line_size) |_| {
                 try writer.writeByte(0);
             }
         }
+    }
+
+    pub fn writeBitmapToFile(self: Self, sub_path: []const u8, allocator: Allocator) !void {
+        const data = try self.toBitmap(allocator);
+        defer allocator.free(data);
+        var file = try std.fs.cwd().createFile(sub_path, .{});
+        defer file.close();
+        try file.writeAll(data);
     }
 };
 

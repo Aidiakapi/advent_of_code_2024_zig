@@ -56,11 +56,10 @@ fn MultiOutputHelperStruct(Output: type) type {
     };
 }
 
-fn MultiOutputHelperVector(Output: type) type {
-    const info = @typeInfo(Output).vector;
+fn MultiOutputHelperArrayOrVector(Output: type, len: comptime_int) type {
     return struct {
         const Self = @This();
-        const count: comptime_int = info.len;
+        const count: comptime_int = len;
         output: Output = undefined,
 
         pub fn set(self: *Self, comptime index: usize, value: anytype) void {
@@ -77,7 +76,8 @@ const MultiOutputHelperVoid = struct {
 fn MultiOutputHelper(Output: type) type {
     return switch (@typeInfo(Output)) {
         .@"struct" => MultiOutputHelperStruct(Output),
-        .vector => MultiOutputHelperVector(Output),
+        .array => |a| MultiOutputHelperArrayOrVector(Output, a.len),
+        .vector => |v| MultiOutputHelperArrayOrVector(Output, v.len),
         .void => MultiOutputHelperVoid,
         else => @compileError(std.fmt.comptimePrint("Type is not supported as output type: {s}", .{@typeName(Output)})),
     };

@@ -171,7 +171,7 @@ fn printParseError(ctx: p.ParseContext, err: p.ParseError, location: []const u8)
 
 fn printPartOutput(stdout: Writer, value: anytype) !void {
     const T = @TypeOf(value);
-    if (T == []u8) {
+    if (T == []u8 or T == []const u8) {
         return term.format(stdout, "{<white>}{s: >20}{<reset>}", .{value});
     }
 

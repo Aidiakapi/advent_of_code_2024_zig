@@ -23,7 +23,8 @@ fn getDay(comptime day_nr: u5) ?type {
         19 => @import("19.zig"),
         20 => @import("20.zig"),
         22 => @import("22.zig"),
-        23 => @import("23.zig"),
+        // 23 => @import("23.zig"),
+        25 => @import("25.zig"),
         else => null,
     };
 }
@@ -48,7 +49,7 @@ pub fn selectedDays() SelectedDaysType() {
 
 const AllDaysType: type = blk: {
     var count = 0;
-    for (1..25) |i| {
+    for (1..25 + 1) |i| {
         if (getDay(@intCast(i))) |_| {
             count += 1;
         }
@@ -76,7 +77,7 @@ inline fn allDays() AllDaysType {
     var result: AllDaysType = undefined;
     var count = 0;
     var i = 1;
-    while (i < 25) : (i += 1) {
+    while (i <= 25) : (i += 1) {
         if (getDay(i)) |day| {
             result[count] = day;
             count += 1;

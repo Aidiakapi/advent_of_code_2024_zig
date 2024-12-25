@@ -1,0 +1,37 @@
+%% A diagram that follows the same structure as the inputs,
+%% but is only 3 bits of input (4 bits of output).
+graph LR
+	x00 --> op01{XOR} --> z00
+	y00 --> op01
+	x00 --> op02{AND} --> c00
+	y00 --> op02
+	x01 --> op03{XOR} --> d01
+	y01 --> op03
+	d01 --> op04{XOR} --> z01
+	c00 --> op04
+	x01 --> op05{AND} --> a01
+	y01 --> op05
+	d01 --> op06{AND} --> b01
+	c00 --> op06
+	a01 --> op07{ OR} --> c01
+	b01 --> op07
+	x02 --> op08{XOR} --> d02
+	y02 --> op08
+	d02 --> op09{XOR} --> z02
+	c01 --> op09
+	x02 --> op10{AND} --> a02
+	y02 --> op10
+	d02 --> op11{AND} --> b02
+	c01 --> op11
+	a02 --> op12{ OR} --> c02
+	b02 --> op12
+	x03 --> op13{XOR} --> d03
+	y03 --> op13
+	d03 --> op14{XOR} --> z03
+	c02 --> op14
+	x03 --> op15{AND} --> a03
+	y03 --> op15
+	d03 --> op16{AND} --> b03
+	c02 --> op16
+	a03 --> op17{ OR} --> z04
+	b03 --> op17

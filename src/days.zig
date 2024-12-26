@@ -22,6 +22,7 @@ fn getDay(comptime day_nr: u5) ?type {
         18 => @import("18.zig"),
         19 => @import("19.zig"),
         20 => @import("20.zig"),
+        21 => @import("21.zig"),
         22 => @import("22.zig"),
         23 => @import("23.zig"),
         24 => @import("24.zig"),
